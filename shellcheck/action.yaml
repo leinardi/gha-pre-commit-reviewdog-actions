@@ -1,0 +1,108 @@
+name: "Run shellcheck via pre-commit + reviewdog"
+description: "Runs shellcheck-json-output via pre-commit on a ref range and reports diagnostics and suggestions via reviewdog"
+author: "leinardi"
+branding:
+  icon: "check-circle"
+  color: "blue"
+
+inputs:
+  from-ref:
+    description: "Base git ref (e.g., PR base SHA)"
+    required: true
+  to-ref:
+    description: "Head git ref (e.g., PR head SHA)"
+    required: true
+  github-token:
+    description: "GitHub token for reviewdog (usually secrets.GITHUB_TOKEN)"
+    required: true
+
+outputs:
+  exitcode:
+    description: "Exit code of the shellcheck-json-output pre-commit hook"
+    value: ${{ steps.sc_lint.outputs.exitcode }}
+
+runs:
+  using: "composite"
+  steps:
+    - name: Cache pre-commit
+      uses: actions/cache@v6
+      with:
+        path: ~/.cache/pre-commit
+        key: pre-commit|${{ runner.os }}|${{ hashFiles('.pre-commit-config.yaml') }}
+
+    - name: Install shellcheck and jq
+      shell: bash
+      run: |
+        set -euo pipefail
+        sudo apt-get update
+        sudo apt-get install -y shellcheck jq
+
+    - name: Install Python deps + pre-commit
+      shell: bash
+      run: |
+        set -euo pipefail
+        pip install --no-cache-dir pre-commit
+
+    - name: Setup reviewdog binary
+      uses: reviewdog/action-setup@d8a7baabd7f3e8544ee4dbde3ee41d0011c3a93f
+      with:
+        reviewdog_version: latest
+
+    - name: Run shellcheck (JSON output)
+      id: sc_lint
+      shell: bash
+      run: |
+        set +e
+        set -o pipefail
+
+        pre-commit run shellcheck-json-output \
+          --hook-stage manual \
+          --from-ref "${{ inputs.from-ref }}" \
+          --to-ref   "${{ inputs.to-ref }}" \
+          --color=never \
+          | tee >(grep -Ev '^\[INFO\]' | tail -n +5 > shellcheck.json)
+
+        exitcode=${PIPESTATUS[0]}
+        echo "exitcode=$exitcode" >> "$GITHUB_OUTPUT"
+
+        # Do not fail here; let reviewdog decide
+        exit 0
+
+    - name: Report shellcheck suggestions via reviewdog (diff)
+      if: steps.sc_lint.outputs.exitcode != '0'
+      env:
+        REVIEWDOG_GITHUB_API_TOKEN: ${{ inputs.github-token }}
+      continue-on-error: true
+      shell: bash
+      run: |
+        pre-commit run shellcheck-diff-output \
+          --hook-stage manual \
+          --from-ref "${{ inputs.from-ref }}" \
+          --to-ref   "${{ inputs.to-ref }}" \
+          --color=never \
+          | grep -Ev '^\[INFO\]' \
+          | tail -n +5 \
+          | reviewdog \
+              -name="shellcheck (suggestion)" \
+              -f=diff \
+              -f.diff.strip=1 \
+              -reporter=github-pr-review \
+              -filter-mode=nofilter \
+              -fail-level=error
+
+    - name: Report shellcheck diagnostics via reviewdog
+      if: steps.sc_lint.outputs.exitcode != '0'
+      env:
+        REVIEWDOG_GITHUB_API_TOKEN: ${{ inputs.github-token }}
+      shell: bash
+      run: |
+        jq -r '.[] | "\(.file):\(.line):\(.column):\(.level):\(.message) [SC\(.code)](https://github.com/koalaman/shellcheck/wiki/SC\(.code))"' shellcheck.json \
+          | reviewdog \
+              -efm="%f:%l:%c:%t%*[^:]:%m" \
+              -name="shellcheck" \
+              -reporter=github-pr-review \
+              -filter-mode=nofilter \
+              -fail-level=error
+
+        # Fail the job if there were violations
+        exit 1

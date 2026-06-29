@@ -1,0 +1,152 @@
+name: CI
+
+on:
+  pull_request:
+  workflow_dispatch:
+
+concurrency:
+  group: "${{ github.workflow }} @ ${{ github.event.pull_request.head.label || github.head_ref || github.ref }}"
+  cancel-in-progress: true
+
+jobs:
+  # ─────────────────────────────────────────────────────────────────────
+  # Self-lint: run each generic action on this repo's own code.
+  # Each job uses the local action from the current branch/commit.
+  # ─────────────────────────────────────────────────────────────────────
+  actionlint:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+
+      - name: Run actionlint via pre-commit + reviewdog
+        uses: ./actionlint
+        with:
+          from-ref: ${{ github.event.pull_request.base.sha }}
+          to-ref: ${{ github.event.pull_request.head.sha }}
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+
+  pre-commit-hooks:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+
+      - name: Run pre-commit hooks + reviewdog diff
+        uses: ./pre-commit-hooks
+        with:
+          from-ref: ${{ github.event.pull_request.base.sha }}
+          to-ref: ${{ github.event.pull_request.head.sha }}
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+
+  markdownlint:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+
+      - name: Run markdownlint-cli2 via pre-commit + reviewdog
+        uses: ./markdownlint-cli2
+        with:
+          from-ref: ${{ github.event.pull_request.base.sha }}
+          to-ref: ${{ github.event.pull_request.head.sha }}
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+
+  mypy:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+
+      - name: Run mypy via pre-commit + reviewdog
+        uses: ./mypy
+        with:
+          from-ref: ${{ github.event.pull_request.base.sha }}
+          to-ref: ${{ github.event.pull_request.head.sha }}
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+
+  ruff:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+
+      - name: Run ruff via pre-commit + reviewdog
+        uses: ./ruff
+        with:
+          from-ref: ${{ github.event.pull_request.base.sha }}
+          to-ref: ${{ github.event.pull_request.head.sha }}
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+
+  shellcheck:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+
+      - name: Run shellcheck via pre-commit + reviewdog
+        uses: ./shellcheck
+        with:
+          from-ref: ${{ github.event.pull_request.base.sha }}
+          to-ref: ${{ github.event.pull_request.head.sha }}
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+
+  yamllint:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+
+      - name: Run yamllint via pre-commit + reviewdog
+        uses: ./yamllint
+        with:
+          from-ref: ${{ github.event.pull_request.base.sha }}
+          to-ref: ${{ github.event.pull_request.head.sha }}
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+
+  # ─────────────────────────────────────────────────────────────────────
+  # Validate every action.yaml schema using mpalmer/action-validator.
+  # Covers actions not exercised by the self-lint jobs above.
+  # ─────────────────────────────────────────────────────────────────────
+  validate-actions:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        action:
+          - conventional-commits
+          - actionlint
+          - ansible-lint
+          - pre-commit-hooks
+          - markdownlint-cli2
+          - mypy
+          - rain-format
+          - ruff
+          - shellcheck
+          - sqlfluff
+          - tofu-docs
+          - tofu-fmt
+          - tofu-tflint
+          - tofu-trivy
+          - yamllint
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      - name: Validate ${{ matrix.action }}/action.yaml
+        uses: mpalmer/action-validator@v0.9.0
+        with:
+          files: ${{ matrix.action }}/action.yaml

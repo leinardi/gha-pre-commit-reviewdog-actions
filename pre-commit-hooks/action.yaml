@@ -1,0 +1,110 @@
+name: "Run pre-commit hooks + reviewdog diff"
+description: "Runs one or more pre-commit hooks on a ref range and, if fixes occur, posts the diff via reviewdog"
+author: "leinardi"
+branding:
+  icon: "check-circle"
+  color: "blue"
+
+inputs:
+  from-ref:
+    description: "Base git ref (e.g., PR base SHA)"
+    required: true
+  to-ref:
+    description: "Head git ref (e.g., PR head SHA)"
+    required: true
+  github-token:
+    description: "GitHub token for reviewdog (usually secrets.GITHUB_TOKEN)"
+    required: true
+  hooks:
+    description: |
+      Newline-separated list of pre-commit hook IDs to run.
+      If not set, a sensible default set of core hooks is used.
+    required: false
+    default: |
+      check-merge-conflict
+      end-of-file-fixer
+      trailing-whitespace
+      check-yaml
+      check-json
+      check-toml
+      check-added-large-files
+
+outputs:
+  exitcode:
+    description: "Non-zero if any hook failed or modified files"
+    value: ${{ steps.pre_commit_hooks.outputs.exitcode }}
+
+runs:
+  using: "composite"
+  steps:
+    - name: Cache pre-commit
+      uses: actions/cache@v6
+      with:
+        path: ~/.cache/pre-commit
+        key: pre-commit|${{ runner.os }}|${{ hashFiles('.pre-commit-config.yaml') }}
+
+    - name: Install Python deps + pre-commit
+      shell: bash
+      run: |
+        set -euo pipefail
+        pip install --no-cache-dir pre-commit
+
+    - name: Setup reviewdog binary
+      uses: reviewdog/action-setup@d8a7baabd7f3e8544ee4dbde3ee41d0011c3a93f
+      with:
+        reviewdog_version: latest
+
+    - name: Run pre-commit hooks
+      id: pre_commit_hooks
+      shell: bash
+      env:
+        HOOKS_INPUT: ${{ inputs.hooks }}
+      run: |
+        set +e
+        set -o pipefail
+
+        exitcode=0
+
+        # Read hooks from the multi-line input; ignore empty lines and comments (# ...)
+        echo "$HOOKS_INPUT" | while IFS= read -r hook; do
+          hook="${hook#"${hook%%[![:space:]]*}"}"   # trim leading spaces
+          hook="${hook%"${hook##*[![:space:]]}"}"   # trim trailing spaces
+          [[ -z "$hook" ]] && continue
+          [[ "$hook" =~ ^# ]] && continue
+
+          echo "::group::Running pre-commit hook: $hook"
+          pre-commit run "$hook" \
+            --from-ref "${{ inputs.from-ref }}" \
+            --to-ref   "${{ inputs.to-ref }}"
+          rc=$?
+          echo "::endgroup::"
+
+          [[ $rc -ne 0 ]] && exitcode=1
+        done
+
+        # Capture any fixes as a diff (even if hooks didn't error but fixed files)
+        git diff > pre-commit-hooks.diff || true
+
+        echo "exitcode=$exitcode" >> "$GITHUB_OUTPUT"
+
+        # Do not fail here; let reviewdog decide
+        exit 0
+
+    - name: Report pre-commit fixes via reviewdog
+      if: steps.pre_commit_hooks.outputs.exitcode != '0'
+      env:
+        REVIEWDOG_GITHUB_API_TOKEN: ${{ inputs.github-token }}
+      continue-on-error: true
+      shell: bash
+      run: |
+        reviewdog \
+          -name="pre-commit (fixes)" \
+          -f=diff \
+          -f.diff.strip=1 \
+          -reporter=github-pr-review \
+          -filter-mode=nofilter < pre-commit-hooks.diff
+
+    - name: Fail on pre-commit issues
+      if: steps.pre_commit_hooks.outputs.exitcode != '0'
+      shell: bash
+      run: exit 1
