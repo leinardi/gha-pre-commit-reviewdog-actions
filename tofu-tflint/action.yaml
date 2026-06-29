@@ -1,0 +1,133 @@
+name: "Run OpenTofu tflint (JSON) via pre-commit + reviewdog"
+description: "Runs tofu_tflint-json-output on a ref range; converts JSON -> RDJSON via jq; posts diagnostics + diff via reviewdog"
+author: "leinardi"
+branding:
+  icon: "check-circle"
+  color: "blue"
+
+inputs:
+  from-ref:
+    description: "Base git ref (e.g., PR base SHA)"
+    required: true
+  to-ref:
+    description: "Head git ref (e.g., PR head SHA)"
+    required: true
+  github-token:
+    description: "GitHub token for reviewdog (usually secrets.GITHUB_TOKEN)"
+    required: true
+
+outputs:
+  exitcode:
+    description: "Exit code returned by the tofu_tflint-json-output pre-commit hook"
+    value: ${{ steps.tofu_tflint.outputs.exitcode }}
+
+runs:
+  using: "composite"
+  steps:
+    - name: Cache pre-commit
+      uses: actions/cache@v6
+      with:
+        path: ~/.cache/pre-commit
+        key: pre-commit|${{ runner.os }}|${{ hashFiles('.pre-commit-config.yaml') }}
+
+    - name: Install Python deps + pre-commit
+      shell: bash
+      run: |
+        set -euo pipefail
+        pip install --no-cache-dir pre-commit
+
+    - name: Setup OpenTofu
+      uses: opentofu/setup-opentofu@v2
+
+    - name: Setup TFLint
+      uses: terraform-linters/setup-tflint@b480b8fcdaa6f2c577f8e4fa799e89e756bb7c93
+      with:
+        github_token: ${{ inputs.github-token }}
+
+    - name: Setup reviewdog binary
+      uses: reviewdog/action-setup@d8a7baabd7f3e8544ee4dbde3ee41d0011c3a93f
+      with:
+        reviewdog_version: latest
+
+    - name: Run OpenTofu tflint (JSON output)
+      id: tofu_tflint
+      shell: bash
+      env:
+        GITHUB_TOKEN: ${{ inputs.github-token }}
+      run: |
+        set +e
+        set -o pipefail
+
+        # Run the manual hook (JSON output per stack)
+        pre-commit run tofu_tflint-json-output \
+          --hook-stage manual \
+          --from-ref "${{ inputs.from-ref }}" \
+          --to-ref   "${{ inputs.to-ref }}" \
+          --color=never \
+          | tee tflint.raw.txt
+
+        rc=${PIPESTATUS[0]}
+        echo "exitcode=$rc" >> "$GITHUB_OUTPUT"
+
+        # Save diff for autofixes (if any)
+        git diff > tflint.diff || true
+
+        # --- Normalize and convert to RDJSON ---
+
+        # 1) Strip ANSI escapes (avoid U+001B issues)
+        sed -E 's/\x1B\[[0-9;]*[A-Za-z]//g; s/\x1B//g' tflint.raw.txt > tflint.clean.txt
+
+        # 2) Pair each JSON line with its "stack prefix" from:  TFLint in <dir>:
+        #    Emit JSONL: {"__prefix":"stacks/base-gcp/","payload":{...original tflint json...}}
+        awk '
+          BEGIN { prefix="" }
+          /^TFLint in / {
+            prefix=$0
+            sub(/^TFLint in /,"",prefix)
+            sub(/:$/,"",prefix)
+            if (prefix!="" && substr(prefix,length(prefix),1)!="/") prefix=prefix "/"
+            next
+          }
+          /^[[:space:]]*{.*}[[:space:]]*$/ {
+            line=$0
+            gsub(/"/, "\\\"", prefix)
+            print "{\"__prefix\":\"" prefix "\",\"payload\":" line "}"
+          }
+        ' tflint.clean.txt > tflint.jsonl
+
+        # 3) Convert JSONL -> RDJSON with jq
+        jq -s -f "$GITHUB_ACTION_PATH/lib/tflint-json-to-rdjson.jq" tflint.jsonl > tflint.rdjson
+
+        # Do not fail here; let reviewdog decide
+        exit 0
+
+    - name: Report OpenTofu tflint suggestions via reviewdog
+      if: steps.tofu_tflint.outputs.exitcode != '0'
+      env:
+        REVIEWDOG_GITHUB_API_TOKEN: ${{ inputs.github-token }}
+      shell: bash
+      continue-on-error: true
+      run: |
+        reviewdog \
+          -name="opentofu tflint (fixes)" \
+          -f=diff \
+          -f.diff.strip=1 \
+          -reporter=github-pr-review \
+          -filter-mode=nofilter < tflint.diff
+
+    - name: Report OpenTofu tflint diagnostics via reviewdog
+      if: steps.tofu_tflint.outputs.exitcode != '0'
+      env:
+        REVIEWDOG_GITHUB_API_TOKEN: ${{ inputs.github-token }}
+      shell: bash
+      run: |
+        cat tflint.rdjson \
+          | reviewdog \
+              -f=rdjson \
+              -name="opentofu tflint" \
+              -reporter=github-pr-review \
+              -filter-mode=nofilter \
+              -fail-level=info
+
+        # Fail the job if there were violations
+        exit 1

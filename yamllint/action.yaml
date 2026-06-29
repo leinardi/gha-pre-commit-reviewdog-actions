@@ -1,0 +1,79 @@
+name: "Run yamllint via pre-commit + reviewdog"
+description: "Runs the yamllint-parsable pre-commit hook on a diff range and reports diagnostics via reviewdog"
+author: "leinardi"
+branding:
+  icon: "check-circle"
+  color: "blue"
+
+inputs:
+  from-ref:
+    description: "Base git ref (e.g., PR base SHA)"
+    required: true
+  to-ref:
+    description: "Head git ref (e.g., PR head SHA)"
+    required: true
+  github-token:
+    description: "GitHub token for reviewdog (usually secrets.GITHUB_TOKEN)"
+    required: true
+
+outputs:
+  exitcode:
+    description: "Exit code from the yamllint-parsable pre-commit hook"
+    value: ${{ steps.yamllint_lint.outputs.exitcode }}
+
+runs:
+  using: "composite"
+  steps:
+    - name: Cache pre-commit
+      uses: actions/cache@v6
+      with:
+        path: ~/.cache/pre-commit
+        key: pre-commit|${{ runner.os }}|${{ hashFiles('.pre-commit-config.yaml') }}
+
+    - name: Install Python deps + pre-commit
+      shell: bash
+      run: |
+        set -euo pipefail
+        pip install --no-cache-dir pre-commit
+
+    - name: Setup reviewdog binary
+      uses: reviewdog/action-setup@d8a7baabd7f3e8544ee4dbde3ee41d0011c3a93f
+      with:
+        reviewdog_version: latest
+
+    - name: Run yamllint (yamllint-parsable hook)
+      id: yamllint_lint
+      shell: bash
+      run: |
+        set +e
+        set -o pipefail
+
+        pre-commit run yamllint-parsable \
+          --hook-stage manual \
+          --from-ref "${{ inputs.from-ref }}" \
+          --to-ref   "${{ inputs.to-ref }}" \
+          --color=never \
+          | tee >(grep -Ev '^\[INFO\]' | tail -n +5 > yamllint-report.txt)
+
+        exitcode=${PIPESTATUS[0]}
+        echo "exitcode=$exitcode" >> "$GITHUB_OUTPUT"
+
+        # Do not fail here; let reviewdog decide
+        exit 0
+
+    - name: Report yamllint via reviewdog
+      if: steps.yamllint_lint.outputs.exitcode != '0'
+      env:
+        REVIEWDOG_GITHUB_API_TOKEN: ${{ inputs.github-token }}
+      shell: bash
+      run: |
+        cat yamllint-report.txt \
+          | reviewdog \
+              -efm="%f:%l:%c: %m" \
+              -name="yamllint" \
+              -reporter=github-pr-review \
+              -filter-mode=nofilter \
+              -fail-level=info
+
+        # Fail the job if there were violations
+        exit 1

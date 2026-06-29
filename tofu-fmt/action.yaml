@@ -1,0 +1,82 @@
+name: "Run OpenTofu fmt via pre-commit + reviewdog"
+description: "Runs tofu_fmt on a ref range and posts diff suggestions via reviewdog"
+author: "leinardi"
+branding:
+  icon: "check-circle"
+  color: "blue"
+
+inputs:
+  from-ref:
+    description: "Base git ref (e.g., PR base SHA)"
+    required: true
+  to-ref:
+    description: "Head git ref (e.g., PR head SHA)"
+    required: true
+  github-token:
+    description: "GitHub token for reviewdog (usually secrets.GITHUB_TOKEN)"
+    required: true
+
+outputs:
+  exitcode:
+    description: "Exit code returned by the tofu_fmt pre-commit hook"
+    value: ${{ steps.tofu_fmt.outputs.exitcode }}
+
+runs:
+  using: "composite"
+  steps:
+    - name: Cache pre-commit
+      uses: actions/cache@v6
+      with:
+        path: ~/.cache/pre-commit
+        key: pre-commit|${{ runner.os }}|${{ hashFiles('.pre-commit-config.yaml') }}
+
+    - name: Install Python deps + pre-commit
+      shell: bash
+      run: |
+        set -euo pipefail
+        pip install --no-cache-dir pre-commit
+
+    - name: Setup OpenTofu
+      uses: opentofu/setup-opentofu@v2
+
+    - name: Setup reviewdog binary
+      uses: reviewdog/action-setup@d8a7baabd7f3e8544ee4dbde3ee41d0011c3a93f
+      with:
+        reviewdog_version: latest
+
+    - name: Run OpenTofu formatter (tofu_fmt hook)
+      id: tofu_fmt
+      shell: bash
+      run: |
+        # Run the hook and capture exit code without failing the step
+        set +e
+        set -o pipefail
+
+        pre-commit run tofu_fmt \
+          --from-ref "${{ inputs.from-ref }}" \
+          --to-ref   "${{ inputs.to-ref }}"
+
+        rc=$?
+        echo "exitcode=$rc" >> "$GITHUB_OUTPUT"
+
+        # Capture any formatting changes as a diff
+        git diff > tofu.diff || true
+
+        # Do not fail here; let reviewdog decide
+        exit 0
+
+    - name: Report OpenTofu fmt suggestions via reviewdog
+      if: steps.tofu_fmt.outputs.exitcode != '0'
+      env:
+        REVIEWDOG_GITHUB_API_TOKEN: ${{ inputs.github-token }}
+      shell: bash
+      run: |
+        reviewdog \
+          -name="opentofu fmt" \
+          -f=diff \
+          -f.diff.strip=1 \
+          -reporter=github-pr-review \
+          -filter-mode=nofilter < tofu.diff
+
+        # Fail the job if there were formatting issues
+        exit 1

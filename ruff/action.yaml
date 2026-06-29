@@ -1,0 +1,141 @@
+name: "Run ruff via pre-commit + reviewdog"
+description: "Runs ruff checks (RDJSON) and ruff format on a diff range; reports diagnostics and fix diffs via reviewdog"
+author: "leinardi"
+branding:
+  icon: "check-circle"
+  color: "blue"
+
+inputs:
+  from-ref:
+    description: "Base git ref (e.g., PR base SHA)"
+    required: true
+  to-ref:
+    description: "Head git ref (e.g., PR head SHA)"
+    required: true
+  github-token:
+    description: "GitHub token for reviewdog (usually secrets.GITHUB_TOKEN)"
+    required: true
+
+outputs:
+  exitcode:
+    description: "Combined exit code of ruff-check-rdjson and ruff-format"
+    value: ${{ steps.combined_exit.outputs.exitcode }}
+
+runs:
+  using: "composite"
+  steps:
+    - name: Cache pre-commit
+      uses: actions/cache@v6
+      with:
+        path: ~/.cache/pre-commit
+        key: pre-commit|${{ runner.os }}|${{ hashFiles('.pre-commit-config.yaml') }}
+
+    - name: Install Python deps + pre-commit
+      shell: bash
+      run: |
+        set -euo pipefail
+        pip install --no-cache-dir pre-commit
+
+    - name: Setup reviewdog binary
+      uses: reviewdog/action-setup@d8a7baabd7f3e8544ee4dbde3ee41d0011c3a93f
+      with:
+        reviewdog_version: latest
+
+    - name: Run ruff check (ruff-check-rdjson hook)
+      id: ruff_check
+      shell: bash
+      run: |
+        set +e
+        set -o pipefail
+
+        pre-commit run ruff-check-rdjson \
+          --hook-stage manual \
+          --from-ref "${{ inputs.from-ref }}" \
+          --to-ref   "${{ inputs.to-ref }}" \
+          --color=never \
+          | tee >(grep -Ev '^\[INFO\]' | tail -n +5 > ruff.rdjson)
+
+        rc_check=${PIPESTATUS[0]}
+        echo "exitcode=$rc_check" >> "$GITHUB_OUTPUT"
+
+        # Normalize absolute paths to relative for reviewdog.
+        if [ -s ruff.rdjson ]; then
+          jq --arg ws "${GITHUB_WORKSPACE%/}/" '
+            (.diagnostics[]?.location.path) |=
+              ( if startswith($ws) then sub("^" + ($ws|gsub("\\\\";"\\\\")); "") else . end )
+          ' ruff.rdjson > ruff.rel.rdjson || cp ruff.rdjson ruff.rel.rdjson
+        else
+          : > ruff.rel.rdjson
+        fi
+
+        # Remove suggestions to avoid reviewdog panic when files change later.
+        jq 'del(.diagnostics[].suggestions)' ruff.rel.rdjson > ruff.nosugg.rdjson || cp ruff.rel.rdjson ruff.nosugg.rdjson
+
+        # Do not fail here; let reviewdog decide
+        exit 0
+
+    - name: Report ruff diagnostics via reviewdog
+      if: steps.ruff_check.outputs.exitcode != '0'
+      continue-on-error: true
+      env:
+        REVIEWDOG_GITHUB_API_TOKEN: ${{ inputs.github-token }}
+      shell: bash
+      run: |
+        cat ruff.nosugg.rdjson \
+          | reviewdog \
+              -f=rdjson \
+              -name="ruff" \
+              -reporter=github-pr-review \
+              -filter-mode=nofilter \
+              -fail-level=info
+
+    - name: Run ruff format
+      id: ruff_format
+      shell: bash
+      run: |
+        set +e
+        set -o pipefail
+
+        pre-commit run ruff-format \
+          --from-ref "${{ inputs.from-ref }}" \
+          --to-ref   "${{ inputs.to-ref }}"
+
+        rc_format=$?
+        echo "exitcode=$rc_format" >> "$GITHUB_OUTPUT"
+
+        # Do not fail here; let reviewdog decide
+        exit 0
+
+    - name: Generate diff for reviewdog
+      if: steps.ruff_check.outputs.exitcode != '0' || steps.ruff_format.outputs.exitcode != '0'
+      shell: bash
+      run: git diff > ruff.diff || true
+
+    - name: Report ruff suggestions via reviewdog
+      if: steps.ruff_check.outputs.exitcode != '0' || steps.ruff_format.outputs.exitcode != '0'
+      env:
+        REVIEWDOG_GITHUB_API_TOKEN: ${{ inputs.github-token }}
+      continue-on-error: true
+      shell: bash
+      run: |
+        reviewdog \
+          -name="ruff (fixes)" \
+          -f=diff \
+          -f.diff.strip=1 \
+          -reporter=github-pr-review \
+          -filter-mode=nofilter < ruff.diff
+
+    - name: Compute combined exit code
+      id: combined_exit
+      shell: bash
+      run: |
+        if [ "${{ steps.ruff_check.outputs.exitcode }}" != '0' ] || [ "${{ steps.ruff_format.outputs.exitcode }}" != '0' ]; then
+          echo "exitcode=1" >> "$GITHUB_OUTPUT"
+        else
+          echo "exitcode=0" >> "$GITHUB_OUTPUT"
+        fi
+
+    - name: Fail on ruff issues
+      if: steps.combined_exit.outputs.exitcode != '0'
+      shell: bash
+      run: exit 1

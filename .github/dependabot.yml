@@ -1,0 +1,46 @@
+version: 2
+updates:
+  # Keep GitHub Actions pins up to date in workflows and every action subdirectory.
+  # Using `directories` ensures dependabot scans action.yaml files in each subdir.
+  - package-ecosystem: "github-actions"
+    directories:
+      - "/"
+      - "/conventional-commits"
+      - "/actionlint"
+      - "/ansible-lint"
+      - "/pre-commit-hooks"
+      - "/markdownlint-cli2"
+      - "/mypy"
+      - "/rain-format"
+      - "/ruff"
+      - "/shellcheck"
+      - "/sqlfluff"
+      - "/tofu-docs"
+      - "/tofu-fmt"
+      - "/tofu-tflint"
+      - "/tofu-trivy"
+      - "/yamllint"
+    schedule:
+      interval: "weekly"
+    labels:
+      - "dependencies"
+      - "ci"
+    open-pull-requests-limit: 20
+    groups:
+      github-actions:
+        patterns:
+          - "*"
+
+  # Keep pre-commit hook revisions up to date
+  - package-ecosystem: "pre-commit"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+    labels:
+      - "dependencies"
+      - "ci"
+    open-pull-requests-limit: 10
+    groups:
+      pre-commit-hooks:
+        patterns:
+          - "*"

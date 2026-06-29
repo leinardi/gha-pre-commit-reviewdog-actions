@@ -1,0 +1,95 @@
+name: "Run actionlint via pre-commit + reviewdog"
+description: "Runs the actionlint-oneline pre-commit hook on a diff range and reports via reviewdog"
+author: "leinardi"
+branding:
+  icon: "check-circle"
+  color: "blue"
+
+inputs:
+  from-ref:
+    description: "Base git ref (e.g., PR base SHA)"
+    required: true
+  to-ref:
+    description: "Head git ref (e.g., PR head SHA)"
+    required: true
+  github-token:
+    description: "GitHub token for reviewdog (usually secrets.GITHUB_TOKEN)"
+    required: true
+
+outputs:
+  exitcode:
+    description: "Exit code of the actionlint-oneline pre-commit hook"
+    value: ${{ steps.actionlint_lint.outputs.exitcode }}
+
+runs:
+  using: "composite"
+  steps:
+    - name: Cache pre-commit
+      uses: actions/cache@v6
+      with:
+        path: ~/.cache/pre-commit
+        key: pre-commit|${{ runner.os }}|${{ hashFiles('.pre-commit-config.yaml') }}
+        restore-keys: |
+          pre-commit|${{ runner.os }}|
+
+    - name: Install Python deps + pre-commit
+      shell: bash
+      run: |
+        set -euo pipefail
+        pip install --no-cache-dir pre-commit
+
+    - name: Setup reviewdog binary
+      uses: reviewdog/action-setup@d8a7baabd7f3e8544ee4dbde3ee41d0011c3a93f
+      with:
+        reviewdog_version: latest
+
+    - name: Run actionlint (actionlint-oneline hook)
+      id: actionlint_lint
+      shell: bash
+      run: |
+        set +e
+        set -o pipefail
+
+        pre-commit run actionlint-oneline \
+          --hook-stage manual \
+          --from-ref "${{ inputs.from-ref }}" \
+          --to-ref   "${{ inputs.to-ref }}" \
+          --color=never \
+          | tee >(grep -Ev '^\[INFO\]' | tail -n +5 > actionlint-report.txt)
+
+        exitcode=${PIPESTATUS[0]}
+        echo "exitcode=$exitcode" >> "$GITHUB_OUTPUT"
+        # Do not fail here; let reviewdog decide
+        exit 0
+
+    - name: Report actionlint via reviewdog
+      if: steps.actionlint_lint.outputs.exitcode != '0'
+      env:
+        REVIEWDOG_GITHUB_API_TOKEN: ${{ inputs.github-token }}
+      shell: bash
+      run: |
+        # Strip header, derive severity (for shellcheck issues), and pass to reviewdog
+        cat actionlint-report.txt \
+          | while read -r r; do
+              # Default to error
+              severity=e
+
+              # If this line is a shellcheck-like message, extract its severity
+              if echo "$r" | grep -q " shellcheck reported issue in this script:"; then
+                s=$(echo "$r" |
+                      sed -E 's/^.* shellcheck reported issue in this script:[^:]*:([^:]).*$/\1/')
+                case "$s" in e|w|i|n) severity="$s" ;; esac
+              fi
+
+              # Prefix for reviewdog's %t:%f:%l:%c:%m format
+              echo "$severity:$r"
+            done \
+          | reviewdog \
+              -efm="%t:%f:%l:%c: %m" \
+              -name="actionlint" \
+              -reporter=github-pr-review \
+              -filter-mode=nofilter \
+              -fail-level=info
+
+        # Fail the job if there were violations
+        exit 1

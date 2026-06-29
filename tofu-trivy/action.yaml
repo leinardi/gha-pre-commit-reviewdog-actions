@@ -1,0 +1,127 @@
+name: "Run Trivy (SARIF) for OpenTofu via pre-commit + reviewdog"
+description: "Runs tofu_trivy-sarif-output on a ref range; extracts & merges SARIF blobs; converts to RDJSON via jq; posts diagnostics via reviewdog"
+author: "leinardi"
+branding:
+  icon: "check-circle"
+  color: "blue"
+
+inputs:
+  from-ref:
+    description: "Base git ref (e.g., PR base SHA)"
+    required: true
+  to-ref:
+    description: "Head git ref (e.g., PR head SHA)"
+    required: true
+  github-token:
+    description: "GitHub token for reviewdog (usually secrets.GITHUB_TOKEN)"
+    required: true
+  gh-module-token:
+    description: "GitHub App token for private module checkouts (optional)"
+    required: false
+
+outputs:
+  exitcode:
+    description: "Exit code returned by the tofu_trivy-sarif-output pre-commit hook"
+    value: ${{ steps.tofu_trivy.outputs.exitcode }}
+
+runs:
+  using: "composite"
+  steps:
+    - name: Cache pre-commit
+      uses: actions/cache@v6
+      with:
+        path: ~/.cache/pre-commit
+        key: pre-commit|${{ runner.os }}|${{ hashFiles('.pre-commit-config.yaml') }}
+
+    - name: Install Python deps + pre-commit
+      shell: bash
+      run: |
+        set -euo pipefail
+        pip install --no-cache-dir pre-commit
+
+    - name: Setup OpenTofu
+      uses: opentofu/setup-opentofu@v2
+
+    - name: Install Trivy
+      uses: aquasecurity/setup-trivy@81e514348e19b6112ce2a7e3ecbafe19c1e1f567
+
+    - name: Setup reviewdog binary
+      uses: reviewdog/action-setup@d8a7baabd7f3e8544ee4dbde3ee41d0011c3a93f
+      with:
+        reviewdog_version: latest
+
+    - name: Configure Git auth for module downloads
+      if: inputs.gh-module-token != ''
+      env:
+        TOKEN: ${{ inputs.gh-module-token }}
+      shell: bash
+      run: |
+        set -euo pipefail
+
+        # Mask the token in logs
+        echo "::add-mask::$TOKEN"
+
+        # Rewrite common SSH-style GitHub URLs to HTTPS with the GitHub App token.
+        git config --global url."https://x-access-token:${TOKEN}@github.com/".insteadof ssh://git@github.com/
+        git config --global url."https://x-access-token:${TOKEN}@github.com".insteadof  ssh://git@github.com
+        git config --global url."https://x-access-token:${TOKEN}@github.com/".insteadof git@github.com:
+        git config --global url."https://x-access-token:${TOKEN}@github.com/".insteadof git::ssh://git@github.com/
+
+    - name: Run Trivy (SARIF) via tofu_trivy-sarif-output
+      id: tofu_trivy
+      shell: bash
+      run: |
+        set +e
+        set -o pipefail
+
+        pre-commit run tofu_trivy-sarif-output \
+          --hook-stage manual \
+          --from-ref "${{ inputs.from-ref }}" \
+          --to-ref   "${{ inputs.to-ref }}" \
+          --color=never \
+          | tee trivy.raw.txt
+
+        rc=${PIPESTATUS[0]}
+        echo "exitcode=$rc" >> "$GITHUB_OUTPUT"
+
+        # Strip ANSI and extract JSON SARIF objects from noisy output into JSONL
+        sed -E 's/\x1B\[[0-9;]*[A-Za-z]//g; s/\x1B//g' trivy.raw.txt > trivy.clean.txt
+
+        awk '
+          BEGIN { depth=0; buf=""; injson=0 }
+          {
+            for (i=1; i<=length($0); i++) {
+              ch=substr($0,i,1)
+              if (ch=="{") { depth++; injson=1 }
+              if (injson) { buf=buf ch }
+              if (ch=="}" && injson) {
+                depth--
+                if (depth==0) { print buf; buf=""; injson=0 }
+              }
+            }
+            if (!injson) { buf="" }
+          }
+        ' trivy.clean.txt | jq -c . > trivy.sarif.jsonl || true
+
+        # Merge SARIF docs and normalize paths → RDJSON
+        jq -s -f "$GITHUB_ACTION_PATH/lib/trivy-sarif-to-rdjson.jq" trivy.sarif.jsonl > trivy.rdjson
+
+        # Do not fail here; let reviewdog decide
+        exit 0
+
+    - name: Report Trivy via reviewdog
+      if: steps.tofu_trivy.outputs.exitcode != '0'
+      env:
+        REVIEWDOG_GITHUB_API_TOKEN: ${{ inputs.github-token }}
+      shell: bash
+      run: |
+        cat trivy.rdjson \
+          | reviewdog \
+              -f=rdjson \
+              -name="trivy" \
+              -reporter=github-pr-review \
+              -filter-mode=nofilter \
+              -fail-level=info
+
+        # Fail the job if there were findings
+        exit 1

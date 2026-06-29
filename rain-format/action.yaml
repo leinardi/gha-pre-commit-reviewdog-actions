@@ -1,0 +1,78 @@
+name: "Run rain format via pre-commit + reviewdog"
+description: "Runs the rain-format pre-commit hook on a ref range and posts diff suggestions via reviewdog"
+author: "leinardi"
+branding:
+  icon: "check-circle"
+  color: "blue"
+
+inputs:
+  from-ref:
+    description: "Base git ref (e.g., PR base SHA)"
+    required: true
+  to-ref:
+    description: "Head git ref (e.g., PR head SHA)"
+    required: true
+  github-token:
+    description: "GitHub token for reviewdog (usually secrets.GITHUB_TOKEN)"
+    required: true
+
+outputs:
+  exitcode:
+    description: "Exit code returned by the rain-format pre-commit hook"
+    value: ${{ steps.rain_fmt.outputs.exitcode }}
+
+runs:
+  using: "composite"
+  steps:
+    - name: Cache pre-commit
+      uses: actions/cache@v6
+      with:
+        path: ~/.cache/pre-commit
+        key: pre-commit|${{ runner.os }}|${{ hashFiles('.pre-commit-config.yaml') }}
+
+    - name: Install Python deps + pre-commit
+      shell: bash
+      run: |
+        set -euo pipefail
+        pip install --no-cache-dir pre-commit
+
+    - name: Setup reviewdog binary
+      uses: reviewdog/action-setup@d8a7baabd7f3e8544ee4dbde3ee41d0011c3a93f
+      with:
+        reviewdog_version: latest
+
+    - name: Run rain formatter (rain-format hook)
+      id: rain_fmt
+      shell: bash
+      run: |
+        set +e
+        set -o pipefail
+
+        pre-commit run rain-format \
+          --from-ref "${{ inputs.from-ref }}" \
+          --to-ref   "${{ inputs.to-ref }}"
+
+        rc=$?
+        echo "exitcode=$rc" >> "$GITHUB_OUTPUT"
+
+        # Capture any formatting changes as a diff
+        git diff > rain.diff || true
+
+        # Do not fail here; let reviewdog decide
+        exit 0
+
+    - name: Report rain suggestions via reviewdog
+      if: steps.rain_fmt.outputs.exitcode != '0'
+      env:
+        REVIEWDOG_GITHUB_API_TOKEN: ${{ inputs.github-token }}
+      shell: bash
+      run: |
+        reviewdog \
+          -name="rain" \
+          -f=diff \
+          -f.diff.strip=1 \
+          -reporter=github-pr-review \
+          -filter-mode=nofilter < rain.diff
+
+        # Fail the job if there were formatting issues
+        exit 1

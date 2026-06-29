@@ -1,0 +1,129 @@
+name: "Run sqlfluff lint/fix via pre-commit + reviewdog"
+description: "Runs sqlfluff lint (JSON) on a diff range, optionally runs sqlfluff-fix, and reports via reviewdog"
+author: "leinardi"
+branding:
+  icon: "check-circle"
+  color: "blue"
+
+inputs:
+  from-ref:
+    description: "Base git ref (e.g., PR base SHA)"
+    required: true
+  to-ref:
+    description: "Head git ref (e.g., PR head SHA)"
+    required: true
+  github-token:
+    description: "GitHub token for reviewdog (usually secrets.GITHUB_TOKEN)"
+    required: true
+  run_fix:
+    description: "Whether to also run sqlfluff-fix and comment the diff (true/false)"
+    required: false
+    default: "true"
+
+outputs:
+  lint_exitcode:
+    description: "Exit code from sqlfluff-lint-json-output"
+    value: ${{ steps.lint.outputs.lint_exitcode }}
+  fix_exitcode:
+    description: "Exit code from sqlfluff-fix (if run)"
+    value: ${{ steps.fix.outputs.fix_exitcode }}
+
+runs:
+  using: "composite"
+  steps:
+    - name: Cache pre-commit
+      uses: actions/cache@v6
+      with:
+        path: ~/.cache/pre-commit
+        key: pre-commit|${{ runner.os }}|${{ hashFiles('.pre-commit-config.yaml') }}
+
+    - name: Install Python deps, pre-commit and jq
+      shell: bash
+      run: |
+        set -euo pipefail
+        sudo apt-get update
+        sudo apt-get install -y jq
+        pip install --no-cache-dir pre-commit
+
+    - name: Setup reviewdog binary
+      uses: reviewdog/action-setup@d8a7baabd7f3e8544ee4dbde3ee41d0011c3a93f
+      with:
+        reviewdog_version: latest
+
+    - name: Run sqlfluff lint (JSON)
+      id: lint
+      shell: bash
+      run: |
+        set +e
+        set -o pipefail
+
+        pre-commit run sqlfluff-lint-json-output \
+          --hook-stage manual \
+          --from-ref "${{ inputs.from-ref }}" \
+          --to-ref   "${{ inputs.to-ref }}" \
+          --color=never \
+          | tee >(grep -Ev '^\[INFO\]' | tail -n +5 > sqlfluff.json)
+
+        lint_rc=${PIPESTATUS[0]}
+        echo "lint_exitcode=$lint_rc" >> "$GITHUB_OUTPUT"
+
+        # Do not fail here; let reviewdog decide
+        exit 0
+
+    - name: Report sqlfluff lint via reviewdog
+      if: steps.lint.outputs.lint_exitcode != '0'
+      env:
+        REVIEWDOG_GITHUB_API_TOKEN: ${{ inputs.github-token }}
+      continue-on-error: true
+      shell: bash
+      run: |
+        cat sqlfluff.json \
+          | jq -r -f "$GITHUB_ACTION_PATH/lib/sqlfluff-json-to-rdjson.jq" \
+          | reviewdog \
+              -f=rdjson \
+              -name="sqlfluff" \
+              -reporter=github-pr-review \
+              -filter-mode=nofilter \
+              -fail-level=info
+
+    - name: Run sqlfluff fix
+      if: inputs.run_fix == 'true'
+      id: fix
+      shell: bash
+      run: |
+        set +e
+        set -o pipefail
+
+        pre-commit run sqlfluff-fix \
+          --from-ref "${{ inputs.from-ref }}" \
+          --to-ref   "${{ inputs.to-ref }}"
+
+        fix_rc=$?
+        echo "fix_exitcode=$fix_rc" >> "$GITHUB_OUTPUT"
+
+        # Capture diff for reviewdog suggestions
+        git diff > sqlfluff-fix.diff || true
+
+        # Do not fail here; let reviewdog decide
+        exit 0
+
+    - name: Report sqlfluff fix suggestions via reviewdog
+      if: inputs.run_fix == 'true' && steps.fix.outputs.fix_exitcode != '0'
+      env:
+        REVIEWDOG_GITHUB_API_TOKEN: ${{ inputs.github-token }}
+      continue-on-error: true
+      shell: bash
+      run: |
+        reviewdog \
+          -name="sqlfluff-fix" \
+          -f=diff \
+          -f.diff.strip=1 \
+          -reporter=github-pr-review \
+          -filter-mode=nofilter < sqlfluff-fix.diff
+
+    - name: Fail on sqlfluff issues
+      if: |
+        steps.lint.outputs.lint_exitcode != '0' ||
+        (inputs.run_fix == 'true' && steps.fix.outputs.fix_exitcode != '0')
+      shell: bash
+      run: exit 1
