@@ -25,7 +25,7 @@ runs:
   using: "composite"
   steps:
     - name: Cache pre-commit
-      uses: actions/cache@v6
+      uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
       with:
         path: ~/.cache/pre-commit
         key: pre-commit|${{ runner.os }}|${{ hashFiles('.pre-commit-config.yaml') }}
@@ -37,7 +37,7 @@ runs:
         pip install --no-cache-dir pre-commit
 
     - name: Setup OpenTofu
-      uses: opentofu/setup-opentofu@v2
+      uses: opentofu/setup-opentofu@a1320f892987e89d278cc92dc5adc984fb93aca4 # v2.0.2
 
     - name: Setup reviewdog binary
       uses: reviewdog/action-setup@d8a7baabd7f3e8544ee4dbde3ee41d0011c3a93f

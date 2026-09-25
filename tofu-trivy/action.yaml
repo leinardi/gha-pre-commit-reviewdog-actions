@@ -28,7 +28,7 @@ runs:
   using: "composite"
   steps:
     - name: Cache pre-commit
-      uses: actions/cache@v6
+      uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
       with:
         path: ~/.cache/pre-commit
         key: pre-commit|${{ runner.os }}|${{ hashFiles('.pre-commit-config.yaml') }}
@@ -40,7 +40,7 @@ runs:
         pip install --no-cache-dir pre-commit
 
     - name: Setup OpenTofu
-      uses: opentofu/setup-opentofu@v2
+      uses: opentofu/setup-opentofu@a1320f892987e89d278cc92dc5adc984fb93aca4 # v2.0.2
 
     - name: Install Trivy
       uses: aquasecurity/setup-trivy@81e514348e19b6112ce2a7e3ecbafe19c1e1f567
