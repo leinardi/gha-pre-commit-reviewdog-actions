@@ -8,16 +8,26 @@ concurrency:
   group: "${{ github.workflow }} @ ${{ github.event.pull_request.head.label || github.head_ref || github.ref }}"
   cancel-in-progress: true
 
+# Every job reads the repository and nothing else, unless it says otherwise below.
+permissions:
+  contents: read
+
 jobs:
   # ─────────────────────────────────────────────────────────────────────
   # Self-lint: run each generic action on this repo's own code.
   # Each job uses the local action from the current branch/commit.
   # ─────────────────────────────────────────────────────────────────────
   actionlint:
+    # The reviewdog reporters comment on a pull request; there is none to comment on otherwise.
+    if: github.event_name == 'pull_request'
     runs-on: ubuntu-latest
+    # reviewdog posts its findings as a pull request review, which needs pull-requests: write.
+    permissions:
+      contents: read
+      pull-requests: write
     steps:
       - name: Checkout
-        uses: actions/checkout@v7
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           fetch-depth: 0
 
@@ -29,10 +39,16 @@ jobs:
           github-token: ${{ secrets.GITHUB_TOKEN }}
 
   pre-commit-hooks:
+    # The reviewdog reporters comment on a pull request; there is none to comment on otherwise.
+    if: github.event_name == 'pull_request'
     runs-on: ubuntu-latest
+    # reviewdog posts its findings as a pull request review, which needs pull-requests: write.
+    permissions:
+      contents: read
+      pull-requests: write
     steps:
       - name: Checkout
-        uses: actions/checkout@v7
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           fetch-depth: 0
 
@@ -44,10 +60,16 @@ jobs:
           github-token: ${{ secrets.GITHUB_TOKEN }}
 
   markdownlint:
+    # The reviewdog reporters comment on a pull request; there is none to comment on otherwise.
+    if: github.event_name == 'pull_request'
     runs-on: ubuntu-latest
+    # reviewdog posts its findings as a pull request review, which needs pull-requests: write.
+    permissions:
+      contents: read
+      pull-requests: write
     steps:
       - name: Checkout
-        uses: actions/checkout@v7
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           fetch-depth: 0
 
@@ -59,10 +81,16 @@ jobs:
           github-token: ${{ secrets.GITHUB_TOKEN }}
 
   mypy:
+    # The reviewdog reporters comment on a pull request; there is none to comment on otherwise.
+    if: github.event_name == 'pull_request'
     runs-on: ubuntu-latest
+    # reviewdog posts its findings as a pull request review, which needs pull-requests: write.
+    permissions:
+      contents: read
+      pull-requests: write
     steps:
       - name: Checkout
-        uses: actions/checkout@v7
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           fetch-depth: 0
 
@@ -74,10 +102,16 @@ jobs:
           github-token: ${{ secrets.GITHUB_TOKEN }}
 
   ruff:
+    # The reviewdog reporters comment on a pull request; there is none to comment on otherwise.
+    if: github.event_name == 'pull_request'
     runs-on: ubuntu-latest
+    # reviewdog posts its findings as a pull request review, which needs pull-requests: write.
+    permissions:
+      contents: read
+      pull-requests: write
     steps:
       - name: Checkout
-        uses: actions/checkout@v7
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           fetch-depth: 0
 
@@ -89,10 +123,16 @@ jobs:
           github-token: ${{ secrets.GITHUB_TOKEN }}
 
   shellcheck:
+    # The reviewdog reporters comment on a pull request; there is none to comment on otherwise.
+    if: github.event_name == 'pull_request'
     runs-on: ubuntu-latest
+    # reviewdog posts its findings as a pull request review, which needs pull-requests: write.
+    permissions:
+      contents: read
+      pull-requests: write
     steps:
       - name: Checkout
-        uses: actions/checkout@v7
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           fetch-depth: 0
 
@@ -104,10 +144,16 @@ jobs:
           github-token: ${{ secrets.GITHUB_TOKEN }}
 
   yamllint:
+    # The reviewdog reporters comment on a pull request; there is none to comment on otherwise.
+    if: github.event_name == 'pull_request'
     runs-on: ubuntu-latest
+    # reviewdog posts its findings as a pull request review, which needs pull-requests: write.
+    permissions:
+      contents: read
+      pull-requests: write
     steps:
       - name: Checkout
-        uses: actions/checkout@v7
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           fetch-depth: 0
 
@@ -117,6 +163,24 @@ jobs:
           from-ref: ${{ github.event.pull_request.base.sha }}
           to-ref: ${{ github.event.pull_request.head.sha }}
           github-token: ${{ secrets.GITHUB_TOKEN }}
+
+  # Every commit in the pull request must follow Conventional Commits with a
+  # scope, checked by this repository's own conventional-commits action (the
+  # local one, so a change to it is exercised before it is released).
+  conventional-commits:
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+
+      - name: Validate the commit messages
+        uses: ./conventional-commits
+        with:
+          from-ref: ${{ github.event.pull_request.base.sha }}
+          to-ref: ${{ github.event.pull_request.head.sha }}
 
   # ─────────────────────────────────────────────────────────────────────
   # Validate every action.yaml schema using mpalmer/action-validator.
@@ -144,9 +208,9 @@ jobs:
           - yamllint
     steps:
       - name: Checkout
-        uses: actions/checkout@v7
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
       - name: Validate ${{ matrix.action }}/action.yaml
-        uses: mpalmer/action-validator@v0.9.0
+        uses: mpalmer/action-validator@c994f427b7c42cd5ecb1bc9315cb91c3d7d72e3d # v0.9.0
         with:
           files: ${{ matrix.action }}/action.yaml

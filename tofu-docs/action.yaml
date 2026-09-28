@@ -58,21 +58,24 @@ runs:
         echo "$RUNNER_TEMP" >> "$GITHUB_PATH"
 
     - name: Setup reviewdog binary
-      uses: reviewdog/action-setup@d8a7baabd7f3e8544ee4dbde3ee41d0011c3a93f
+      uses: reviewdog/action-setup@d8a7baabd7f3e8544ee4dbde3ee41d0011c3a93f # v1.5.0
       with:
-        reviewdog_version: latest
+        reviewdog_version: v0.21.2 # pinned by hand: Dependabot does not track this input
 
     - name: Run OpenTofu docs (tofu_docs hook)
       id: tofu_docs
       shell: bash
+      env:
+        FROM_REF: ${{ inputs.from-ref }}
+        TO_REF: ${{ inputs.to-ref }}
       run: |
         # Run the hook and capture exit code without failing the step
         set +e
         set -o pipefail
 
         pre-commit run tofu_docs \
-          --from-ref "${{ inputs.from-ref }}" \
-          --to-ref   "${{ inputs.to-ref }}"
+          --from-ref "$FROM_REF" \
+          --to-ref   "$TO_REF"
 
         rc=$?
         echo "exitcode=$rc" >> "$GITHUB_OUTPUT"

@@ -46,9 +46,9 @@ runs:
       uses: aquasecurity/setup-trivy@81e514348e19b6112ce2a7e3ecbafe19c1e1f567
 
     - name: Setup reviewdog binary
-      uses: reviewdog/action-setup@d8a7baabd7f3e8544ee4dbde3ee41d0011c3a93f
+      uses: reviewdog/action-setup@d8a7baabd7f3e8544ee4dbde3ee41d0011c3a93f # v1.5.0
       with:
-        reviewdog_version: latest
+        reviewdog_version: v0.21.2 # pinned by hand: Dependabot does not track this input
 
     - name: Configure Git auth for module downloads
       if: inputs.gh-module-token != ''
@@ -70,14 +70,17 @@ runs:
     - name: Run Trivy (SARIF) via tofu_trivy-sarif-output
       id: tofu_trivy
       shell: bash
+      env:
+        FROM_REF: ${{ inputs.from-ref }}
+        TO_REF: ${{ inputs.to-ref }}
       run: |
         set +e
         set -o pipefail
 
         pre-commit run tofu_trivy-sarif-output \
           --hook-stage manual \
-          --from-ref "${{ inputs.from-ref }}" \
-          --to-ref   "${{ inputs.to-ref }}" \
+          --from-ref "$FROM_REF" \
+          --to-ref   "$TO_REF" \
           --color=never \
           | tee trivy.raw.txt
 

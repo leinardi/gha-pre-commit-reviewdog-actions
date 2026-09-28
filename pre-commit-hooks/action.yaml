@@ -50,14 +50,16 @@ runs:
         pip install --no-cache-dir pre-commit
 
     - name: Setup reviewdog binary
-      uses: reviewdog/action-setup@d8a7baabd7f3e8544ee4dbde3ee41d0011c3a93f
+      uses: reviewdog/action-setup@d8a7baabd7f3e8544ee4dbde3ee41d0011c3a93f # v1.5.0
       with:
-        reviewdog_version: latest
+        reviewdog_version: v0.21.2 # pinned by hand: Dependabot does not track this input
 
     - name: Run pre-commit hooks
       id: pre_commit_hooks
       shell: bash
       env:
+        FROM_REF: ${{ inputs.from-ref }}
+        TO_REF: ${{ inputs.to-ref }}
         HOOKS_INPUT: ${{ inputs.hooks }}
       run: |
         set +e
@@ -74,8 +76,8 @@ runs:
 
           echo "::group::Running pre-commit hook: $hook"
           pre-commit run "$hook" \
-            --from-ref "${{ inputs.from-ref }}" \
-            --to-ref   "${{ inputs.to-ref }}"
+            --from-ref "$FROM_REF" \
+            --to-ref   "$TO_REF"
           rc=$?
           echo "::endgroup::"
 
