@@ -77,7 +77,7 @@ jobs:
   ruff:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           fetch-depth: 0
 
@@ -135,6 +135,12 @@ Each action follows this pattern:
 5. Add a `validate-actions` matrix entry in `.github/workflows/ci.yaml`.
 6. If it's a generic linter suited for linting this repo's own code, add a self-lint job to CI.
 7. Update this root README table.
+
+---
+
+## Contributing
+
+See [CONTRIBUTING.md](CONTRIBUTING.md). Security issues: [SECURITY.md](SECURITY.md).
 
 ---
 
