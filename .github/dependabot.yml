@@ -22,7 +22,7 @@ updates:
       - "/tofu-trivy"
       - "/yamllint"
     schedule:
-      interval: "weekly"
+      interval: "monthly"
     labels:
       - "dependencies"
       - "ci"
@@ -38,7 +38,7 @@ updates:
   - package-ecosystem: "pre-commit"
     directory: "/"
     schedule:
-      interval: "weekly"
+      interval: "monthly"
     labels:
       - "dependencies"
       - "ci"
