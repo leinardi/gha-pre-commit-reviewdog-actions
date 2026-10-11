@@ -44,6 +44,10 @@ against `main`.
 
 Read every changed `action.yaml` in full, its `README.md`, and any `lib/*.jq` it uses.
 
+Also read `git log --oneline` for the range and any linked issue or pull request body: the stated
+**intent** is what you check the change against. A change that works but does something other
+than what it claims is a finding.
+
 ## 2. Load project authority
 
 Read `AGENTS.md` first. Each action's `README.md` is its public contract (hook alias the caller
@@ -92,6 +96,18 @@ must declare, inputs, outputs): behaviour and README must agree.
   hook the action runs.
 - **Contract drift:** root `README.md` table, action `README.md`, `dependabot.yml` directories
   and the CI `validate-actions` matrix all list a new or renamed action.
+- **Commit type:** each commit's type must match whether the change ships (`AGENTS.md`, Commit
+  messages). The Release workflow derives the version with `svu` from the commits since the last
+  tag, and every `@v1` caller picks the release up at once. A change to what a caller runs (an
+  `action.yaml`, a `lib/*.jq` filter) typed `chore`, `ci`, `docs` or `refactor` never ships; a
+  repository-only change typed `fix` or `feat` cuts a release callers did not need; a stray `!` or
+  `BREAKING CHANGE:` footer cuts a major. Pull requests land as merge commits, so every commit
+  counts, not only the title.
+- **A check that can no longer fail:** a hook, script or CI job is only worth its green if it
+  still fails on what it exists to stop. Make the guarded thing go wrong (drop a license header,
+  dirty a file in `pre-commit-all`, fail a job `ci-result` needs) and see whether it still
+  notices. A check that passes because its file list is empty, its hook never ran, its job was
+  skipped or a `|| true` swallowed the exit status is a false pass.
 
 For each candidate finding, reproduce it or trace the failing input end to end. If that confirms
 it, report it; if not, dig once more, then drop it. No named input and wrong result, no finding.
@@ -102,6 +118,8 @@ it, report it; if not, dig once more, then drop it. No named input and wrong res
 | --- | --- |
 | any `action.yaml` | `make check`; the CI self-lint job for that action runs it on this repository from the branch |
 | `conventional-commits/` | also run its step script against a throwaway repository with good, bad and merge commits |
+| `scripts/check-license-headers.sh` | `scripts/check-license-headers.sh`, then again with a header removed from one governed file: it must fail and name it |
+| `.github/workflows/ci.yaml` | `pre-commit run actionlint --all-files`; `ci-result` still needs every job |
 | anything else | `make check` |
 
 An action with no self-lint job in `.github/workflows/ci.yaml` is only schema-checked here
