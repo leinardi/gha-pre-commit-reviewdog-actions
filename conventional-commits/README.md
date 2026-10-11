@@ -16,8 +16,9 @@ file-level annotations because commit messages are not tied to a specific file o
 
 ## Requirements
 
-Add the `conventional-pre-commit` hook to your `.pre-commit-config.yaml` with `stages: [commit-msg]`, and install the
-`commit-msg` hook type by default, so `pre-commit install` checks messages locally too:
+Add the `conventional-pre-commit` hook to your `.pre-commit-config.yaml` with
+`stages: [commit-msg]`, and install the `commit-msg` hook type by default, so `pre-commit install`
+checks messages locally too:
 
 ```yaml
 default_install_hook_types: [pre-commit, commit-msg]
@@ -31,8 +32,8 @@ repos:
         args: ["--force-scope"]  # require a scope: type(scope): subject
 ```
 
-The action runs **your** hook, with your arguments, so the CI check and the local `commit-msg` hook always agree. It fails with a
-clear error if the hook is missing from `.pre-commit-config.yaml`.
+The action runs **your** hook, with your arguments, so the CI check and the local `commit-msg` hook
+always agree. It fails with a clear error if the hook is missing from `.pre-commit-config.yaml`.
 
 You also need `actions/checkout` fetching enough history to include both `from-ref` and `to-ref`:
 
@@ -82,11 +83,11 @@ jobs:
           to-ref: ${{ github.event.pull_request.head.sha }}
 ```
 
-Merge commits are skipped. Only commits are checked, not the pull-request title: if squash merging is enabled, the title becomes the
-commit on the default branch and needs its own check.
+Merge commits are skipped. Only commits are checked, not the pull-request title: if squash merging
+is enabled, the title becomes the commit on the default branch and needs its own check.
 
-Outside `pull_request` events (for example a CI run dispatched on a release branch opened with `GITHUB_TOKEN`, which does not
-trigger `pull_request`), pass a branch range instead:
+Outside `pull_request` events (for example a CI run dispatched on a release branch opened with
+`GITHUB_TOKEN`, which does not trigger `pull_request`), pass a branch range instead:
 
 ```yaml
       - name: Validate commit messages
@@ -98,8 +99,8 @@ trigger `pull_request`), pass a branch range instead:
 
 ## Versioning
 
-Pin to a commit SHA with the version in a trailing comment (Dependabot keeps it current), or to the major version for
-automatic patch/minor updates:
+Pin to a commit SHA with the version in a trailing comment (Dependabot keeps it current), or to the
+major version for automatic patch/minor updates:
 
 ```yaml
 uses: leinardi/gha-pre-commit-reviewdog-actions/conventional-commits@v1

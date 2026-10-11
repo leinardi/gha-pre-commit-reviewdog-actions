@@ -1,6 +1,7 @@
 # Run shellcheck via pre-commit + reviewdog
 
-This GitHub Action runs `shellcheck` via [`pre-commit`](https://pre-commit.com/) on a ref range and reports:
+This GitHub Action runs `shellcheck` via [`pre-commit`](https://pre-commit.com/) on a ref range and
+reports:
 
 - **Diagnostics** (JSON-based) as inline comments
 - **Suggested fixes** as a diff review
@@ -102,9 +103,10 @@ jobs:
 
 This will:
 
-1. Run `shellcheck-json-output` on shell files changed between `from-ref` and `to-ref` and report diagnostics with links to the corresponding
-   ShellCheck wiki pages.
-2. Run `shellcheck-diff-output` to generate a diff of suggested fixes and post it as a review (`shellcheck (suggestion)`).
+1. Run `shellcheck-json-output` on shell files changed between `from-ref` and `to-ref` and report
+   diagnostics with links to the corresponding ShellCheck wiki pages.
+2. Run `shellcheck-diff-output` to generate a diff of suggested fixes and post it as a review
+   (`shellcheck (suggestion)`).
 3. Fail the job if issues are found.
 
 ## Versioning

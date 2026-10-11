@@ -1,7 +1,8 @@
 # Run actionlint via pre-commit + reviewdog
 
-This GitHub Action runs the [`actionlint-oneline`](https://github.com/rhysd/actionlint) [`pre-commit`](https://pre-commit.com/) hook on a diff range
-and reports results to pull requests using [reviewdog](https://github.com/reviewdog/reviewdog).
+This GitHub Action runs the [`actionlint-oneline`](https://github.com/rhysd/actionlint)
+[`pre-commit`](https://pre-commit.com/) hook on a diff range and reports results to pull requests
+using [reviewdog](https://github.com/reviewdog/reviewdog).
 
 Typical use case:
 
@@ -11,7 +12,8 @@ Typical use case:
 
 ## Requirements
 
-Add the `actionlint` hooks to your `.pre-commit-config.yaml`, including the `actionlint-oneline` alias with the `manual` stage:
+Add the `actionlint` hooks to your `.pre-commit-config.yaml`, including the `actionlint-oneline`
+alias with the `manual` stage:
 
 ```yaml
 repos:

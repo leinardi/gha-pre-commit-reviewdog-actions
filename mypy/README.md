@@ -1,9 +1,11 @@
 # Run mypy via pre-commit + reviewdog
 
-This GitHub Action runs [`mypy`](https://mypy-lang.org/) via [`pre-commit`](https://pre-commit.com/) on a ref range and reports diagnostics to pull
-requests using [reviewdog](https://github.com/reviewdog/reviewdog), using RDJSON as the intermediate format.
+This GitHub Action runs [`mypy`](https://mypy-lang.org/) via [`pre-commit`](https://pre-commit.com/)
+on a ref range and reports diagnostics to pull requests using
+[reviewdog](https://github.com/reviewdog/reviewdog), using RDJSON as the intermediate format.
 
-It uses the `mypy-json-output` hook to produce JSON lines, then converts them to RDJSON via a jq script.
+It uses the `mypy-json-output` hook to produce JSON lines, then converts them to RDJSON via a jq
+script.
 
 ## Requirements
 

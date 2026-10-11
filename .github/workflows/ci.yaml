@@ -1,7 +1,13 @@
 name: CI
 
+# pre-commit-all and validate-actions run on every pull request and every push to main. The
+# self-lint jobs run this repository's own actions on a pull request's diff range, so they only
+# run on pull requests; ci-result is the one check the ruleset requires.
 on:
   pull_request:
+  push:
+    branches:
+      - main
   workflow_dispatch:
 
 concurrency:
@@ -13,6 +19,43 @@ permissions:
   contents: read
 
 jobs:
+  # Every hook on every file, the same run as make check. The self-lint jobs below only see a pull
+  # request's diff range; this one also catches a hook that fails on a file nobody touched, such as
+  # the license-header check after a new file lands without its header.
+  pre-commit-all:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Set up Python
+        uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: "3.x"
+
+      - name: Install pre-commit
+        run: pip install --no-cache-dir pre-commit==4.6.2
+
+      # Restore only: pre-commit-warmup.yaml saves the entry on main under the same key.
+      - name: Restore the pre-commit cache
+        uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ~/.cache/pre-commit
+          key: pre-commit|${{ runner.os }}|${{ hashFiles('.pre-commit-config.yaml') }}
+
+      - name: Run every pre-commit hook on every file
+        run: pre-commit run --all-files --show-diff-on-failure
+
+      # pre-commit fails a hook that modifies a tracked file, which covers the auto-fixing hooks
+      # (markdownlint fix, prettier, ruff); this also fails on a file a hook creates, which its diff
+      # check does not see, so no fix can pass silently.
+      - name: Fail if a hook modified a file
+        run: |
+          git diff --exit-code
+          test -z "$(git status --porcelain)"
+
   # ─────────────────────────────────────────────────────────────────────
   # Self-lint: run each generic action on this repo's own code.
   # Each job uses the local action from the current branch/commit.
@@ -214,3 +257,50 @@ jobs:
         uses: mpalmer/action-validator@c994f427b7c42cd5ecb1bc9315cb91c3d7d72e3d # v0.9.0
         with:
           files: ${{ matrix.action }}/action.yaml
+
+  # The single required check: it needs every job above, so a ruleset names one check that cannot
+  # go stale when a job is added or renamed. The self-lint jobs and conventional-commits only run
+  # on pull requests, so on a push or a dispatch they may be skipped; everything else must succeed.
+  ci-result:
+    if: always()
+    needs:
+      - pre-commit-all
+      - actionlint
+      - pre-commit-hooks
+      - markdownlint
+      - mypy
+      - ruff
+      - shellcheck
+      - yamllint
+      - conventional-commits
+      - validate-actions
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+
+    steps:
+      - name: Check the needed jobs
+        env:
+          NEEDS: ${{ toJSON(needs) }}
+          EVENT: ${{ github.event_name }}
+        run: |
+          set -euo pipefail
+          failed="$(jq -r --arg event "${EVENT}" '
+            ["actionlint", "pre-commit-hooks", "markdownlint", "mypy", "ruff", "shellcheck",
+             "yamllint", "conventional-commits"] as $pr_only
+            | to_entries[]
+            | select(.value.result != "success")
+            | select(
+                (
+                  $event != "pull_request"
+                  and (.key as $k | $pr_only | index($k))
+                  and .value.result == "skipped"
+                ) | not
+              )
+            | "\(.key): \(.value.result)"
+          ' <<<"${NEEDS}")"
+          if [[ -n "${failed}" ]]; then
+            echo "::error::Needed jobs did not succeed:"
+            echo "${failed}"
+            exit 1
+          fi
+          echo "Every needed job succeeded."

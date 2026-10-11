@@ -1,13 +1,16 @@
 # Run pre-commit hooks + reviewdog diff
 
-This GitHub Action runs one or more [`pre-commit`](https://pre-commit.com/) hooks on a ref range and, if any of them fail or modify files, posts the
-resulting diff to the pull request as a review using [reviewdog](https://github.com/reviewdog/reviewdog).
+This GitHub Action runs one or more [`pre-commit`](https://pre-commit.com/) hooks on a ref range
+and, if any of them fail or modify files, posts the resulting diff to the pull request as a review
+using [reviewdog](https://github.com/reviewdog/reviewdog).
 
-It’s designed as a lightweight “core hygiene” action for things like whitespace, merge conflicts, config checks, and large file detection.
+It’s designed as a lightweight “core hygiene” action for things like whitespace, merge conflicts,
+config checks, and large file detection.
 
 ## Default hooks
 
-By default, this action expects the following hooks to be configured in your `.pre-commit-config.yaml`:
+By default, this action expects the following hooks to be configured in your
+`.pre-commit-config.yaml`:
 
 ```yaml
 repos:

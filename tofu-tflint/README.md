@@ -1,6 +1,8 @@
 # Run OpenTofu tflint (JSON) via pre-commit + reviewdog
 
-This GitHub Action runs `tofu_tflint` from [`pre-commit-opentofu`](https://github.com/tofuutils/pre-commit-opentofu) in JSON mode on a ref range and:
+This GitHub Action runs `tofu_tflint` from
+[`pre-commit-opentofu`](https://github.com/tofuutils/pre-commit-opentofu) in JSON mode on a ref
+range and:
 
 - Converts the TFLint JSON output to RDJSON via a jq script
 - Posts diagnostics as inline comments
@@ -8,7 +10,8 @@ This GitHub Action runs `tofu_tflint` from [`pre-commit-opentofu`](https://githu
 
 using [reviewdog](https://github.com/reviewdog/reviewdog).
 
-It is intended to lint your OpenTofu stacks with TFLint in CI, reusing your local `pre-commit` configuration.
+It is intended to lint your OpenTofu stacks with TFLint in CI, reusing your local `pre-commit`
+configuration.
 
 ## Requirements
 
