@@ -130,11 +130,13 @@ Each action follows this pattern:
 
 1. Create `<tool>/action.yaml` as a `using: "composite"` action with `from-ref`, `to-ref`, and
    `github-token` inputs (plus any tool-specific inputs).
-2. Reference `$GITHUB_ACTION_PATH/lib/...` for any jq scripts.
+2. Reference `$GITHUB_ACTION_PATH/lib/...` for any jq scripts, each starting with the MIT
+   license header (`scripts/check-license-headers.sh` checks it).
 3. Add a `<tool>/README.md` documenting requirements, inputs/outputs, and usage.
 4. Add the tool directory to the `directories` list in `.github/dependabot.yml`.
 5. Add a `validate-actions` matrix entry in `.github/workflows/ci.yaml`.
-6. If it's a generic linter suited for linting this repo's own code, add a self-lint job to CI.
+6. If it's a generic linter suited for linting this repo's own code, add a self-lint job to CI,
+   add it to `ci-result`'s `needs`, and to the list of pull-request-only jobs it may skip.
 7. Update this root README table.
 
 ---
