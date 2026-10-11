@@ -1,9 +1,12 @@
 # Run OpenTofu fmt via pre-commit + reviewdog
 
-This GitHub Action runs the `tofu_fmt` hook from [`pre-commit-opentofu`](https://github.com/tofuutils/pre-commit-opentofu) on a ref range and posts
-formatting suggestions to pull requests as a diff review using [reviewdog](https://github.com/reviewdog/reviewdog).
+This GitHub Action runs the `tofu_fmt` hook from
+[`pre-commit-opentofu`](https://github.com/tofuutils/pre-commit-opentofu) on a ref range and posts
+formatting suggestions to pull requests as a diff review using
+[reviewdog](https://github.com/reviewdog/reviewdog).
 
-It is meant to keep your OpenTofu configuration consistently formatted in CI, mirroring your local `pre-commit` setup.
+It is meant to keep your OpenTofu configuration consistently formatted in CI, mirroring your local
+`pre-commit` setup.
 
 ## Requirements
 

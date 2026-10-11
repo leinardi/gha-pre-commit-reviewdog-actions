@@ -1,7 +1,7 @@
 # Run markdownlint-cli2 via pre-commit + reviewdog
 
-This GitHub Action runs the [`markdownlint-cli2`](https://github.com/DavidAnson/markdownlint-cli2) [`pre-commit`](https://pre-commit.com/) hook on a
-ref range and reports:
+This GitHub Action runs the [`markdownlint-cli2`](https://github.com/DavidAnson/markdownlint-cli2)
+[`pre-commit`](https://pre-commit.com/) hook on a ref range and reports:
 
 - Suggested fixes (as a diff review)
 - Diagnostics (inline comments on the PR)

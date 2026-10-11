@@ -1,7 +1,8 @@
 # Run yamllint via pre-commit + reviewdog
 
-This GitHub Action runs [`yamllint`](https://github.com/adrienverge/yamllint) via [`pre-commit`](https://pre-commit.com/) on a ref range and reports
-diagnostics to pull requests using [reviewdog](https://github.com/reviewdog/reviewdog).
+This GitHub Action runs [`yamllint`](https://github.com/adrienverge/yamllint) via
+[`pre-commit`](https://pre-commit.com/) on a ref range and reports diagnostics to pull requests
+using [reviewdog](https://github.com/reviewdog/reviewdog).
 
 It uses the `yamllint-parsable` hook to produce parseable output suitable for reviewdog.
 

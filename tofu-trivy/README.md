@@ -1,6 +1,8 @@
 # Run Trivy (SARIF) for OpenTofu via pre-commit + reviewdog
 
-This GitHub Action runs `tofu_trivy` from [`pre-commit-opentofu`](https://github.com/tofuutils/pre-commit-opentofu) in SARIF mode on a ref range and:
+This GitHub Action runs `tofu_trivy` from
+[`pre-commit-opentofu`](https://github.com/tofuutils/pre-commit-opentofu) in SARIF mode on a ref
+range and:
 
 - Extracts and merges SARIF blobs from the Trivy output
 - Converts the result to RDJSON via a jq script
@@ -40,8 +42,8 @@ You also need:
     fetch-depth: 0
 ```
 
-If you scan modules from private GitHub repositories, you may also provide a GitHub App token via `gh-module-token` to allow Trivy/OpenTofu to fetch
-those modules.
+If you scan modules from private GitHub repositories, you may also provide a GitHub App token via
+`gh-module-token` to allow Trivy/OpenTofu to fetch those modules.
 
 ## Inputs
 

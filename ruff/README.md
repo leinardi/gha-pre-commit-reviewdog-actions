@@ -1,6 +1,7 @@
 # Run ruff via pre-commit + reviewdog
 
-This GitHub Action runs [`ruff`](https://docs.astral.sh/ruff/) via [`pre-commit`](https://pre-commit.com/) on a ref range and reports:
+This GitHub Action runs [`ruff`](https://docs.astral.sh/ruff/) via
+[`pre-commit`](https://pre-commit.com/) on a ref range and reports:
 
 - **Diagnostics** (RDJSON) as inline comments
 - **Suggested fixes** (formatting / autofixes) as a diff review
@@ -87,8 +88,8 @@ jobs:
 
 This will:
 
-1. Run `ruff-check-rdjson` on files changed between `from-ref` and `to-ref`, capture RDJSON, normalize paths, strip suggestions, and report
-   diagnostics via reviewdog.
+1. Run `ruff-check-rdjson` on files changed between `from-ref` and `to-ref`, capture RDJSON,
+   normalize paths, strip suggestions, and report diagnostics via reviewdog.
 2. Run `ruff-format` on the same range.
 3. Generate a diff of fixes and post it as a review (`ruff (fixes)`).
 4. Fail the job if either step reports issues.

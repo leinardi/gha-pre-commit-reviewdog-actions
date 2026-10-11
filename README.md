@@ -1,7 +1,8 @@
 # gha-pre-commit-reviewdog-actions
 
-A monorepo of GitHub Actions that run [`pre-commit`](https://pre-commit.com/) hooks on a pull-request diff range and report results as inline PR
-comments using [reviewdog](https://github.com/reviewdog/reviewdog).
+A monorepo of GitHub Actions that run [`pre-commit`](https://pre-commit.com/) hooks on a
+pull-request diff range and report results as inline PR comments using
+[reviewdog](https://github.com/reviewdog/reviewdog).
 
 Each action is independently usable from any GitHub Actions workflow:
 

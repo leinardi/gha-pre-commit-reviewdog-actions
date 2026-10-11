@@ -1,6 +1,7 @@
 # Run sqlfluff lint/fix via pre-commit + reviewdog
 
-This GitHub Action runs [`sqlfluff`](https://www.sqlfluff.com/) via [`pre-commit`](https://pre-commit.com/) on a ref range and reports:
+This GitHub Action runs [`sqlfluff`](https://www.sqlfluff.com/) via
+[`pre-commit`](https://pre-commit.com/) on a ref range and reports:
 
 - **Lint diagnostics** (JSON → RDJSON) as inline comments
 - **Optional fix suggestions** (diff of `sqlfluff-fix`) as a review
@@ -97,7 +98,8 @@ This will:
 
 1. Run `sqlfluff-lint-json-output` on SQL files changed between `from-ref` and `to-ref`.
 2. Convert the JSON output to RDJSON via the jq script and report diagnostics via reviewdog.
-3. If `run_fix` is `true`, run `sqlfluff-fix` on the same range and post the resulting diff as a review (`sqlfluff-fix`).
+3. If `run_fix` is `true`, run `sqlfluff-fix` on the same range and post the resulting diff as a
+   review (`sqlfluff-fix`).
 4. Fail the job if either lint or fix reports issues.
 
 ## Versioning

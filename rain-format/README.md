@@ -1,9 +1,12 @@
 # Run rain format via pre-commit + reviewdog
 
-This GitHub Action runs the `rain-format` hook from [`rain`](https://github.com/aws-cloudformation/rain) via [`pre-commit`](https://pre-commit.com/)
-on a ref range and posts formatting suggestions to pull requests as a diff review using [reviewdog](https://github.com/reviewdog/reviewdog).
+This GitHub Action runs the `rain-format` hook from
+[`rain`](https://github.com/aws-cloudformation/rain) via [`pre-commit`](https://pre-commit.com/) on
+a ref range and posts formatting suggestions to pull requests as a diff review using
+[reviewdog](https://github.com/reviewdog/reviewdog).
 
-It is intended to keep your CloudFormation YAML consistently formatted in CI, mirroring your local `pre-commit` setup.
+It is intended to keep your CloudFormation YAML consistently formatted in CI, mirroring your local
+`pre-commit` setup.
 
 ## Requirements
 
@@ -24,8 +27,8 @@ repos:
         stages: [manual]
 ````
 
-> **Note:** This action uses only the `rain-format` hook. You can still run `rain-verify` locally or in a separate job if you want verification
-> without writes.
+> **Note:** This action uses only the `rain-format` hook. You can still run `rain-verify` locally or
+> in a separate job if you want verification without writes.
 
 You also need:
 

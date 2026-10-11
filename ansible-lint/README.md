@@ -1,7 +1,8 @@
 # Run ansible-lint via pre-commit + reviewdog
 
-This GitHub Action runs the [`ansible-lint-parseable`](https://ansible-lint.readthedocs.io/) [`pre-commit`](https://pre-commit.com/) hook on a ref
-range and reports diagnostics to pull requests using [reviewdog](https://github.com/reviewdog/reviewdog).
+This GitHub Action runs the [`ansible-lint-parseable`](https://ansible-lint.readthedocs.io/)
+[`pre-commit`](https://pre-commit.com/) hook on a ref range and reports diagnostics to pull requests
+using [reviewdog](https://github.com/reviewdog/reviewdog).
 
 Typical use case:
 
@@ -12,7 +13,8 @@ Typical use case:
 
 ## Requirements
 
-Add the `ansible-lint` hooks to your `.pre-commit-config.yaml`, including the `ansible-lint-parseable` alias with the `manual` stage:
+Add the `ansible-lint` hooks to your `.pre-commit-config.yaml`, including the
+`ansible-lint-parseable` alias with the `manual` stage:
 
 ```yaml
 repos:
