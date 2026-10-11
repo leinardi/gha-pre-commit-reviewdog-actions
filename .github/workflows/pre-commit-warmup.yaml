@@ -22,5 +22,12 @@ permissions:
   contents: read
 
 jobs:
+  # The reusable workflow's prune job keeps only the newest two pre-commit caches of this ref, so
+  # the repository cache quota is not spent on hook environments nothing uses any more. Deleting a
+  # cache needs actions: write, which only the calling job can grant: without it the prune job
+  # warns and skips.
   warm-pre-commit-cache:
-    uses: leinardi/gh-reusable-workflows/.github/workflows/pre-commit-warmup.yaml@4b8d094239089d9f91fd15b929db30fcb2a3c118 # v1.3.1
+    permissions:
+      contents: read
+      actions: write
+    uses: leinardi/gh-reusable-workflows/.github/workflows/pre-commit-warmup.yaml@ba5f6ec7596a5eb306ad2f7511a888ec8dde6d53 # v1.4.0
