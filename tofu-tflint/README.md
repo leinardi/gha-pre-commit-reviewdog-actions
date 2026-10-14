@@ -106,5 +106,5 @@ uses: leinardi/gha-pre-commit-reviewdog-actions/tofu-tflint@v1
 For fully reproducible behavior, pin to an exact tag:
 
 ```yaml
-uses: leinardi/gha-pre-commit-reviewdog-actions/tofu-tflint@v1.0.0
+uses: leinardi/gha-pre-commit-reviewdog-actions/tofu-tflint@v1.0.3
 ```
