@@ -23,6 +23,10 @@ updates:
       - "/yamllint"
     schedule:
       interval: "monthly"
+    # Wait a week after a release before proposing it (GitHub's default is
+    # 3 days), so a broken or compromised release has time to be yanked.
+    cooldown:
+      default-days: 7
     labels:
       - "dependencies"
       - "ci"
@@ -39,6 +43,8 @@ updates:
     directory: "/"
     schedule:
       interval: "monthly"
+    cooldown:
+      default-days: 7
     labels:
       - "dependencies"
       - "ci"
