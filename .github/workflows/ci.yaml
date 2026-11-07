@@ -1,8 +1,9 @@
 name: CI
 
-# pre-commit-all and validate-actions run on every pull request and every push to main. The
-# self-lint jobs run this repository's own actions on a pull request's diff range, so they only
-# run on pull requests; ci-result is the one check the ruleset requires.
+# pre-commit-all, script-tests, validate-actions and the self-test matrix run on every pull request
+# and every push to main. The self-lint jobs run this repository's own actions on a pull request's
+# diff range and post a review, so they only run on pull requests; ci-result is the one check the
+# ruleset requires.
 on:
   pull_request:
   push:
@@ -10,9 +11,11 @@ on:
       - main
   workflow_dispatch:
 
+# A newer push to a pull request cancels the older run. A push to main never cancels one: every
+# main commit keeps its own ci-result.
 concurrency:
   group: "${{ github.workflow }} @ ${{ github.event.pull_request.head.label || github.head_ref || github.ref }}"
-  cancel-in-progress: true
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 # Every job reads the repository and nothing else, unless it says otherwise below.
 permissions:
@@ -29,6 +32,8 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
 
       - name: Set up Python
         id: python
@@ -61,22 +66,24 @@ jobs:
           test -z "$(git status --porcelain)"
 
   # ─────────────────────────────────────────────────────────────────────
-  # Self-lint: run each generic action on this repo's own code.
-  # Each job uses the local action from the current branch/commit.
+  # Self-lint: run each generic action on this repo's own code, from the
+  # current branch (uses: ./<action>), reporting as a pull request review.
   # ─────────────────────────────────────────────────────────────────────
   actionlint:
-    # The reviewdog reporters comment on a pull request; there is none to comment on otherwise.
     if: github.event_name == 'pull_request'
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     # reviewdog posts its findings as a pull request review, which needs pull-requests: write.
     permissions:
       contents: read
       pull-requests: write
+
     steps:
       - name: Checkout
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           fetch-depth: 0
+          persist-credentials: false
 
       - name: Run actionlint via pre-commit + reviewdog
         uses: ./actionlint
@@ -86,18 +93,20 @@ jobs:
           github-token: ${{ secrets.GITHUB_TOKEN }}
 
   pre-commit-hooks:
-    # The reviewdog reporters comment on a pull request; there is none to comment on otherwise.
     if: github.event_name == 'pull_request'
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     # reviewdog posts its findings as a pull request review, which needs pull-requests: write.
     permissions:
       contents: read
       pull-requests: write
+
     steps:
       - name: Checkout
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           fetch-depth: 0
+          persist-credentials: false
 
       - name: Run pre-commit hooks + reviewdog diff
         uses: ./pre-commit-hooks
@@ -107,18 +116,20 @@ jobs:
           github-token: ${{ secrets.GITHUB_TOKEN }}
 
   markdownlint:
-    # The reviewdog reporters comment on a pull request; there is none to comment on otherwise.
     if: github.event_name == 'pull_request'
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     # reviewdog posts its findings as a pull request review, which needs pull-requests: write.
     permissions:
       contents: read
       pull-requests: write
+
     steps:
       - name: Checkout
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           fetch-depth: 0
+          persist-credentials: false
 
       - name: Run markdownlint-cli2 via pre-commit + reviewdog
         uses: ./markdownlint-cli2
@@ -128,18 +139,20 @@ jobs:
           github-token: ${{ secrets.GITHUB_TOKEN }}
 
   mypy:
-    # The reviewdog reporters comment on a pull request; there is none to comment on otherwise.
     if: github.event_name == 'pull_request'
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     # reviewdog posts its findings as a pull request review, which needs pull-requests: write.
     permissions:
       contents: read
       pull-requests: write
+
     steps:
       - name: Checkout
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           fetch-depth: 0
+          persist-credentials: false
 
       - name: Run mypy via pre-commit + reviewdog
         uses: ./mypy
@@ -149,18 +162,20 @@ jobs:
           github-token: ${{ secrets.GITHUB_TOKEN }}
 
   ruff:
-    # The reviewdog reporters comment on a pull request; there is none to comment on otherwise.
     if: github.event_name == 'pull_request'
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     # reviewdog posts its findings as a pull request review, which needs pull-requests: write.
     permissions:
       contents: read
       pull-requests: write
+
     steps:
       - name: Checkout
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           fetch-depth: 0
+          persist-credentials: false
 
       - name: Run ruff via pre-commit + reviewdog
         uses: ./ruff
@@ -170,18 +185,20 @@ jobs:
           github-token: ${{ secrets.GITHUB_TOKEN }}
 
   shellcheck:
-    # The reviewdog reporters comment on a pull request; there is none to comment on otherwise.
     if: github.event_name == 'pull_request'
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     # reviewdog posts its findings as a pull request review, which needs pull-requests: write.
     permissions:
       contents: read
       pull-requests: write
+
     steps:
       - name: Checkout
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           fetch-depth: 0
+          persist-credentials: false
 
       - name: Run shellcheck via pre-commit + reviewdog
         uses: ./shellcheck
@@ -191,18 +208,20 @@ jobs:
           github-token: ${{ secrets.GITHUB_TOKEN }}
 
   yamllint:
-    # The reviewdog reporters comment on a pull request; there is none to comment on otherwise.
     if: github.event_name == 'pull_request'
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     # reviewdog posts its findings as a pull request review, which needs pull-requests: write.
     permissions:
       contents: read
       pull-requests: write
+
     steps:
       - name: Checkout
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           fetch-depth: 0
+          persist-credentials: false
 
       - name: Run yamllint via pre-commit + reviewdog
         uses: ./yamllint
@@ -217,11 +236,14 @@ jobs:
   conventional-commits:
     if: github.event_name == 'pull_request'
     runs-on: ubuntu-latest
+    timeout-minutes: 10
+
     steps:
       - name: Checkout
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           fetch-depth: 0
+          persist-credentials: false
 
       - name: Validate the commit messages
         uses: ./conventional-commits
@@ -229,22 +251,45 @@ jobs:
           from-ref: ${{ github.event.pull_request.base.sha }}
           to-ref: ${{ github.event.pull_request.head.sha }}
 
+  # The plain-bash tests of lib/, of each action's scripts, of the self-test tooling and of
+  # scripts/: stubbed pre-commit and reviewdog, real git in temporary repositories, no network.
+  script-tests:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      # conventional-commits' tests also run the real pre-commit (they skip without it).
+      - name: Set up Python
+        uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
+        with:
+          python-version: "3.x"
+
+      - name: Install pre-commit
+        run: python -m pip install --disable-pip-version-check --no-cache-dir pre-commit==4.6.2
+
+      - name: Run the script tests
+        run: make test
+
   # ─────────────────────────────────────────────────────────────────────
   # Validate every action.yaml schema using mpalmer/action-validator.
-  # Covers actions not exercised by the self-lint jobs above.
   # ─────────────────────────────────────────────────────────────────────
   validate-actions:
     runs-on: ubuntu-latest
+    timeout-minutes: 5
     strategy:
       matrix:
         action:
-          - conventional-commits
           - actionlint
           - ansible-lint
-          - pre-commit-hooks
+          - conventional-commits
           - markdownlint-cli2
           - mypy
-          - rain-format
+          - pre-commit-hooks
           - ruff
           - shellcheck
           - sqlfluff
@@ -256,11 +301,311 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
 
       - name: Validate ${{ matrix.action }}/action.yaml
         uses: mpalmer/action-validator@c994f427b7c42cd5ecb1bc9315cb91c3d7d72e3d # v0.9.0
         with:
           files: ${{ matrix.action }}/action.yaml
+
+  # Every action, run the way a caller runs it, on a caller repository generated for the row: this
+  # repository is checked out at self/ and tests/self-test/<action>.sh builds the caller at caller/
+  # (siblings, never nested), so nothing malformed is ever committed here. The action reports with
+  # reporter local (no pull request, no token) and continue-on-error, then the row checks:
+  #   - the verdict (check-verdict.sh): bad fails with result failed and ran true, clean and nested
+  #     pass with result passed and ran true (the hook ran, not "no files to check"), none passes
+  #     with result skipped and ran false; an empty output is a failure; conventional-commits,
+  #     which only has exitcode, fails on bad and passes otherwise;
+  #   - what reached reviewdog (check-reports.sh): each action copies every report it posts into
+  #     its reports-dir. Bad needs findings > 0, counts that add up, and the planted finding in a
+  #     report (for RDJSON as a diagnostic's message or rule code), so a converter that drops the
+  #     diagnostics fails the row even though the hook failed; clean and nested need findings 0;
+  #     none needs findings 0 and no report file;
+  #   - that the caller tree and self/ are byte for byte as before (tree-manifest.sh: every path's
+  #     type, permission bits and sha256, and the real index file; the caller's ignored paths, such
+  #     as a hook's cache, are outside the actions' guarantee and left out);
+  #   - for bad, as a secondary check (check-finding.sh), that the hook run directly on the same
+  #     files reports the planted finding: it separates a stale generator from a lost finding.
+  # The nested row adds an untracked nested checkout inside caller/, holding files the hooks would
+  # fix, which the action must leave out (with a notice, not checked here: it is only in the log)
+  # instead of failing.
+  #
+  # Not covered here: the github-pr-review and github-check reporters (the self-lint jobs above
+  # post real reviews on pull requests), tofu-trivy's gh-module-token (private modules need a
+  # secret) and sqlfluff with run-fix false. The tofu-* rows need no secret: the actions install
+  # OpenTofu, terraform-docs, tflint and trivy themselves, tflint uses only its bundled ruleset and
+  # trivy only its public checks bundle.
+  self-test:
+    name: self-test (${{ matrix.action }}, ${{ matrix.mode }})
+    strategy:
+      fail-fast: false
+      matrix:
+        action:
+          - actionlint
+          - ansible-lint
+          - conventional-commits
+          - markdownlint-cli2
+          - mypy
+          - pre-commit-hooks
+          - ruff
+          - shellcheck
+          - sqlfluff
+          - tofu-docs
+          - tofu-fmt
+          - tofu-tflint
+          - tofu-trivy
+          - yamllint
+        mode: [bad, clean, none]
+        include:
+          - action: pre-commit-hooks
+            mode: nested
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          path: self
+          persist-credentials: false
+
+      - name: Generate the caller repository
+        id: caller
+        env:
+          ACTION: ${{ matrix.action }}
+          MODE: ${{ matrix.mode }}
+        run: bash "self/tests/self-test/${ACTION}.sh" "${MODE}" caller
+
+      - name: Record the caller and self/ before the action
+        run: |
+          set -euo pipefail
+          self/scripts/tree-manifest.sh --exclude-ignored caller >"${RUNNER_TEMP}/caller.before"
+          self/scripts/tree-manifest.sh self >"${RUNNER_TEMP}/self.before"
+          # Outside the caller's work tree, as the reports-dir input requires.
+          mkdir -p "${RUNNER_TEMP}/reports"
+
+      # One step per action, because a uses: cannot come from the matrix. Each has the id
+      # run-<action>, which check-verdict.sh looks up.
+      - name: Run actionlint
+        id: run-actionlint
+        if: matrix.action == 'actionlint'
+        continue-on-error: true
+        uses: ./self/actionlint
+        with:
+          from-ref: ${{ steps.caller.outputs.from-ref }}
+          to-ref: ${{ steps.caller.outputs.to-ref }}
+          working-directory: caller
+          reporter: local
+          reports-dir: ${{ runner.temp }}/reports
+
+      - name: Run ansible-lint
+        id: run-ansible-lint
+        if: matrix.action == 'ansible-lint'
+        continue-on-error: true
+        uses: ./self/ansible-lint
+        with:
+          from-ref: ${{ steps.caller.outputs.from-ref }}
+          to-ref: ${{ steps.caller.outputs.to-ref }}
+          working-directory: caller
+          reporter: local
+          reports-dir: ${{ runner.temp }}/reports
+          # ansible-lint's hook asks for python3.14 (language_version), so that is the Python
+          # set up for pre-commit.
+          python-version: "3.14"
+
+      - name: Run conventional-commits
+        id: run-conventional-commits
+        if: matrix.action == 'conventional-commits'
+        continue-on-error: true
+        uses: ./self/conventional-commits
+        with:
+          from-ref: ${{ steps.caller.outputs.from-ref }}
+          to-ref: ${{ steps.caller.outputs.to-ref }}
+          working-directory: caller
+
+      - name: Run markdownlint-cli2
+        id: run-markdownlint-cli2
+        if: matrix.action == 'markdownlint-cli2'
+        continue-on-error: true
+        uses: ./self/markdownlint-cli2
+        with:
+          from-ref: ${{ steps.caller.outputs.from-ref }}
+          to-ref: ${{ steps.caller.outputs.to-ref }}
+          working-directory: caller
+          reporter: local
+          reports-dir: ${{ runner.temp }}/reports
+
+      - name: Run mypy
+        id: run-mypy
+        if: matrix.action == 'mypy'
+        continue-on-error: true
+        uses: ./self/mypy
+        with:
+          from-ref: ${{ steps.caller.outputs.from-ref }}
+          to-ref: ${{ steps.caller.outputs.to-ref }}
+          working-directory: caller
+          reporter: local
+          reports-dir: ${{ runner.temp }}/reports
+
+      - name: Run pre-commit-hooks
+        id: run-pre-commit-hooks
+        if: matrix.action == 'pre-commit-hooks'
+        continue-on-error: true
+        uses: ./self/pre-commit-hooks
+        with:
+          from-ref: ${{ steps.caller.outputs.from-ref }}
+          to-ref: ${{ steps.caller.outputs.to-ref }}
+          working-directory: caller
+          reporter: local
+          reports-dir: ${{ runner.temp }}/reports
+
+      - name: Run ruff
+        id: run-ruff
+        if: matrix.action == 'ruff'
+        continue-on-error: true
+        uses: ./self/ruff
+        with:
+          from-ref: ${{ steps.caller.outputs.from-ref }}
+          to-ref: ${{ steps.caller.outputs.to-ref }}
+          working-directory: caller
+          reporter: local
+          reports-dir: ${{ runner.temp }}/reports
+
+      - name: Run shellcheck
+        id: run-shellcheck
+        if: matrix.action == 'shellcheck'
+        continue-on-error: true
+        uses: ./self/shellcheck
+        with:
+          from-ref: ${{ steps.caller.outputs.from-ref }}
+          to-ref: ${{ steps.caller.outputs.to-ref }}
+          working-directory: caller
+          reporter: local
+          reports-dir: ${{ runner.temp }}/reports
+
+      - name: Run sqlfluff
+        id: run-sqlfluff
+        if: matrix.action == 'sqlfluff'
+        continue-on-error: true
+        uses: ./self/sqlfluff
+        with:
+          from-ref: ${{ steps.caller.outputs.from-ref }}
+          to-ref: ${{ steps.caller.outputs.to-ref }}
+          working-directory: caller
+          reporter: local
+          reports-dir: ${{ runner.temp }}/reports
+
+      - name: Run tofu-docs
+        id: run-tofu-docs
+        if: matrix.action == 'tofu-docs'
+        continue-on-error: true
+        uses: ./self/tofu-docs
+        with:
+          from-ref: ${{ steps.caller.outputs.from-ref }}
+          to-ref: ${{ steps.caller.outputs.to-ref }}
+          working-directory: caller
+          reporter: local
+          reports-dir: ${{ runner.temp }}/reports
+
+      - name: Run tofu-fmt
+        id: run-tofu-fmt
+        if: matrix.action == 'tofu-fmt'
+        continue-on-error: true
+        uses: ./self/tofu-fmt
+        with:
+          from-ref: ${{ steps.caller.outputs.from-ref }}
+          to-ref: ${{ steps.caller.outputs.to-ref }}
+          working-directory: caller
+          reporter: local
+          reports-dir: ${{ runner.temp }}/reports
+
+      - name: Run tofu-tflint
+        id: run-tofu-tflint
+        if: matrix.action == 'tofu-tflint'
+        continue-on-error: true
+        uses: ./self/tofu-tflint
+        with:
+          from-ref: ${{ steps.caller.outputs.from-ref }}
+          to-ref: ${{ steps.caller.outputs.to-ref }}
+          working-directory: caller
+          reporter: local
+          reports-dir: ${{ runner.temp }}/reports
+          # setup-tflint downloads tflint from GitHub releases with this token, so the download
+          # is not rate-limited; with reporter local, reviewdog never uses it.
+          github-token: ${{ github.token }}
+
+      - name: Run tofu-trivy
+        id: run-tofu-trivy
+        if: matrix.action == 'tofu-trivy'
+        continue-on-error: true
+        uses: ./self/tofu-trivy
+        with:
+          from-ref: ${{ steps.caller.outputs.from-ref }}
+          to-ref: ${{ steps.caller.outputs.to-ref }}
+          working-directory: caller
+          reporter: local
+          reports-dir: ${{ runner.temp }}/reports
+
+      - name: Run yamllint
+        id: run-yamllint
+        if: matrix.action == 'yamllint'
+        continue-on-error: true
+        uses: ./self/yamllint
+        with:
+          from-ref: ${{ steps.caller.outputs.from-ref }}
+          to-ref: ${{ steps.caller.outputs.to-ref }}
+          working-directory: caller
+          reporter: local
+          reports-dir: ${{ runner.temp }}/reports
+
+      # Every check below runs even when an earlier one failed, so a row reports all it found.
+      - name: Check the verdict
+        if: ${{ !cancelled() }}
+        env:
+          ACTION: ${{ matrix.action }}
+          MODE: ${{ matrix.mode }}
+          STEPS: ${{ toJSON(steps) }}
+        run: bash self/tests/self-test/check-verdict.sh
+
+      - name: Check the findings and the reports the action posted
+        if: ${{ !cancelled() && matrix.action != 'conventional-commits' }}
+        env:
+          ACTION: ${{ matrix.action }}
+          MODE: ${{ matrix.mode }}
+          STEPS: ${{ toJSON(steps) }}
+          REPORTS_DIR: ${{ runner.temp }}/reports
+          EXPECTED: ${{ steps.caller.outputs.expected-finding }}
+        run: bash self/tests/self-test/check-reports.sh
+
+      - name: Check the caller and self/ are unchanged
+        if: ${{ !cancelled() }}
+        run: |
+          set -euo pipefail
+          self/scripts/tree-manifest.sh --exclude-ignored caller >"${RUNNER_TEMP}/caller.after"
+          self/scripts/tree-manifest.sh self >"${RUNNER_TEMP}/self.after"
+          status=0
+          diff -u "${RUNNER_TEMP}/caller.before" "${RUNNER_TEMP}/caller.after" || {
+            echo "::error::the action changed the caller repository"
+            status=1
+          }
+          diff -u "${RUNNER_TEMP}/self.before" "${RUNNER_TEMP}/self.after" || {
+            echo "::error::the action changed its own checkout (self/)"
+            status=1
+          }
+          exit "${status}"
+
+      # Secondary: when the reports check fails, this tells a generator whose bad change no
+      # longer trips the hook apart from an action that lost the finding on the way to reviewdog.
+      - name: Check the hook itself reports the planted finding
+        if: ${{ !cancelled() && matrix.mode == 'bad' && matrix.action != 'conventional-commits' }}
+        env:
+          FROM_REF: ${{ steps.caller.outputs.from-ref }}
+          TO_REF: ${{ steps.caller.outputs.to-ref }}
+          CHECK_HOOK: ${{ steps.caller.outputs.check-hook }}
+          CHECK_STAGE: ${{ steps.caller.outputs.check-stage }}
+          EXPECTED: ${{ steps.caller.outputs.expected-finding }}
+        run: bash self/tests/self-test/check-finding.sh caller
 
   # The single required check: it needs every job above, so a ruleset names one check that cannot
   # go stale when a job is added or renamed. The self-lint jobs and conventional-commits only run
@@ -277,7 +622,9 @@ jobs:
       - shellcheck
       - yamllint
       - conventional-commits
+      - script-tests
       - validate-actions
+      - self-test
     runs-on: ubuntu-latest
     timeout-minutes: 5
 
