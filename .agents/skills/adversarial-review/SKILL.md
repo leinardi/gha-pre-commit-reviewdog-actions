@@ -73,8 +73,13 @@ must declare, inputs, outputs): behaviour and README must agree.
 ### Pinning and cache
 
 - Every `uses:` is a full SHA with a `# vX.Y.Z` comment; the reviewdog binary version is explicit.
-- The cache key must stay `pre-commit|<os>|hash(.pre-commit-config.yaml)`, shared with
-  `gh-reusable-workflows`' warm-up.
+- The pre-commit cache is restore-only (`actions/cache/restore`), under
+  `<cache-key-prefix>|<os>|<resolved Python>|hash(.pre-commit-config.yaml)`: the key
+  `gh-reusable-workflows`' warm-up saves. The `python-version`, `pre-commit-version` and
+  `cache-key-prefix` defaults stay equal to the warm-up's, and this repository's own warm-up pins a
+  GRW release that writes that key.
+- An action's system dependencies (the `apt-get` steps of `shellcheck` and `sqlfluff`) stay: a
+  self-hosted Ubuntu runner may not have them.
 
 ### Reporting
 

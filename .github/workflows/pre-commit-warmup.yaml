@@ -2,7 +2,9 @@ name: Pre-commit Cache Warm-up
 
 # Keeps a main-branch cache of the pre-commit hook environments for pull requests to restore: the
 # pre-commit-all job in ci.yaml and the self-lint actions read it under the same key
-# (pre-commit|<OS>|<hash of .pre-commit-config.yaml>). The weekly schedule is eviction insurance.
+# (pre-commit|<OS>|<resolved Python>|<hash of .pre-commit-config.yaml>), so the reusable workflow's
+# python_version and pre_commit_version defaults (3.x, 4.6.2) must stay equal to theirs. The weekly
+# schedule is eviction insurance.
 on:
   push:
     branches:
@@ -15,7 +17,7 @@ on:
   workflow_dispatch:
 
 concurrency:
-  group: pre-commit-warmup
+  group: pre-commit-warmup-${{ github.ref }}
   cancel-in-progress: true
 
 permissions:
@@ -30,4 +32,4 @@ jobs:
     permissions:
       contents: read
       actions: write
-    uses: leinardi/gh-reusable-workflows/.github/workflows/pre-commit-warmup.yaml@ba5f6ec7596a5eb306ad2f7511a888ec8dde6d53 # v1.4.0
+    uses: leinardi/gh-reusable-workflows/.github/workflows/pre-commit-warmup.yaml@b131932e6482a7f7661a26391fdfa2297d60332a # v1.5.0

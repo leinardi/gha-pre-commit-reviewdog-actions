@@ -49,6 +49,9 @@ You also need `actions/checkout` fetching enough history to include both `from-r
 | --- | --- | --- |
 | `from-ref` | ✅ | Base git ref (e.g., PR base SHA) |
 | `to-ref` | ✅ | Head git ref (e.g., PR head SHA) |
+| `python-version` | ❌ | Python for `setup-python`; its resolved version is part of the cache key (default `3.x`) |
+| `pre-commit-version` | ❌ | pre-commit release to install, `X.Y.Z` (default `4.6.2`) |
+| `cache-key-prefix` | ❌ | First part of the pre-commit cache key (default `pre-commit`) |
 
 ## Outputs
 

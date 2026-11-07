@@ -66,6 +66,22 @@ Every action requires the same three inputs:
 
 Some actions have additional optional inputs — see their per-action README for details.
 
+### Pre-commit cache
+
+Every action sets up Python, installs a pinned pre-commit and **restores** the pre-commit cache;
+none of them saves it. The entry is written on the default branch by
+[`gh-reusable-workflows`' `pre-commit-warmup.yaml`](https://github.com/leinardi/gh-reusable-workflows/blob/main/.github/workflows/pre-commit-warmup.md),
+under `<cache-key-prefix>|<os>|<resolved Python>|hash(.pre-commit-config.yaml)`. Three optional
+inputs, common to every action, keep the two sides equal; their defaults match the warm-up's:
+
+| Input | Default | Description |
+| --- | --- | --- |
+| `python-version` | `3.x` | Python for `setup-python`; its resolved version is part of the key |
+| `pre-commit-version` | `4.6.2` | pre-commit release to install, `X.Y.Z` |
+| `cache-key-prefix` | `pre-commit` | First part of the key |
+
+The action's Python stays set up for the rest of the job.
+
 Example workflow running `ruff` on every pull request:
 
 ```yaml

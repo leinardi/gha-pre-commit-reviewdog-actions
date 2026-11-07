@@ -44,6 +44,9 @@ You also need:
 | `to-ref` | ✅ | – | Head git ref (e.g. PR head SHA) |
 | `github-token` | ✅ | – | GitHub token for reviewdog (`secrets.GITHUB_TOKEN`) |
 | `terraform-docs-version` | ❌ | `v0.20.0` | `terraform-docs` version tag to install (e.g. `v0.20.0`) |
+| `python-version` | ❌ | `3.x` | Python for `setup-python`; its resolved version is part of the cache key |
+| `pre-commit-version` | ❌ | `4.6.2` | pre-commit release to install, `X.Y.Z` |
+| `cache-key-prefix` | ❌ | `pre-commit` | First part of the pre-commit cache key |
 
 ## Outputs
 

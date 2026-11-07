@@ -16,6 +16,25 @@ inputs:
     description: "GitHub token for reviewdog (usually secrets.GITHUB_TOKEN)"
     required: true
 
+  python-version:
+    description: >-
+      The Python for setup-python, such as `3.x` or `3.13`. Its resolved version is part of the
+      cache key, so keep it equal to the pre-commit warm-up's `python_version`.
+    required: false
+    default: "3.x"
+  pre-commit-version:
+    description: >-
+      The pre-commit release to install, X.Y.Z. Keep it equal to the version the warm-up and the
+      rest of CI install.
+    required: false
+    default: "4.6.2"
+  cache-key-prefix:
+    description: >-
+      The first part of the pre-commit cache key, before `|<runner.os>|`. Keep it equal to the
+      warm-up's `cache_key_prefix`.
+    required: false
+    default: "pre-commit"
+
 outputs:
   exitcode:
     description: "Exit code returned by the tofu_fmt pre-commit hook"
@@ -24,17 +43,40 @@ outputs:
 runs:
   using: "composite"
   steps:
-    - name: Cache pre-commit
-      uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+    # The hook environments are virtualenvs bound to the interpreter that built them, so the
+    # Python is set up here and its resolved version is part of the cache key, as in
+    # gh-reusable-workflows' pre-commit-warmup.yaml.
+    - name: Set up Python
+      id: python
+      uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
       with:
-        path: ~/.cache/pre-commit
-        key: pre-commit|${{ runner.os }}|${{ hashFiles('.pre-commit-config.yaml') }}
+        python-version: ${{ inputs.python-version }}
 
-    - name: Install Python deps + pre-commit
+    - name: Install pre-commit
       shell: bash
+      env:
+        PRE_COMMIT_VERSION: ${{ inputs.pre-commit-version }}
       run: |
         set -euo pipefail
-        pip install --no-cache-dir pre-commit
+        # A pinned release only: the value becomes a pip requirement, so anything but X.Y.Z (an
+        # empty value, a range, an option) is refused rather than handed to pip.
+        if ! [[ "$PRE_COMMIT_VERSION" =~ ^(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$ ]]; then
+          echo "::error title=Invalid pre-commit-version::pre-commit-version must be X.Y.Z, got '$PRE_COMMIT_VERSION'."
+          exit 1
+        fi
+        python -m pip install --disable-pip-version-check --no-cache-dir "pre-commit==$PRE_COMMIT_VERSION"
+        pre-commit --version
+
+    # Restore only: the default branch's pre-commit warm-up is the only writer, so a pull request
+    # never saves an entry. The restore key falls back to the newest entry for the same OS and
+    # Python when .pre-commit-config.yaml changed; pre-commit installs only what is missing.
+    - name: Restore the pre-commit cache
+      uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+      with:
+        path: ~/.cache/pre-commit
+        key: ${{ inputs.cache-key-prefix }}|${{ runner.os }}|${{ steps.python.outputs.python-version }}|${{ hashFiles('.pre-commit-config.yaml') }}
+        restore-keys: |
+          ${{ inputs.cache-key-prefix }}|${{ runner.os }}|${{ steps.python.outputs.python-version }}|
 
     - name: Setup OpenTofu
       uses: opentofu/setup-opentofu@a1320f892987e89d278cc92dc5adc984fb93aca4 # v2.0.2
