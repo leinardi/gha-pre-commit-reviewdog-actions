@@ -1,24 +1,16 @@
-# Validate commit messages via conventional-pre-commit
+# conventional-commits
 
-This GitHub Action checks every non-merge commit in a PR diff range against the
-[Conventional Commits](https://www.conventionalcommits.org/) spec using the
-[`conventional-pre-commit`](https://github.com/compilerla/conventional-pre-commit)
-[`pre-commit`](https://pre-commit.com/) hook.
-
-Typical use case:
-
-- Enforce Conventional Commits format on all PR commits
-- Fail the job with `::error::` annotations identifying each offending commit SHA and subject
-- Skip merge commits automatically
-
-Unlike the other actions in this monorepo, this action does **not** use reviewdog — there are no
-file-level annotations because commit messages are not tied to a specific file or line.
+Checks the message of every non-merge commit between two commits with the caller's own
+`conventional-pre-commit` [pre-commit](https://pre-commit.com/) hook, so the CI check and the local
+`commit-msg` hook always agree. Each message that does not follow [Conventional
+Commits](https://www.conventionalcommits.org/) gets an `::error::` annotation with the commit's
+short SHA and subject, and the step fails. No reviewdog, no token.
 
 ## Requirements
 
-Add the `conventional-pre-commit` hook to your `.pre-commit-config.yaml` with
-`stages: [commit-msg]`, and install the `commit-msg` hook type by default, so `pre-commit install`
-checks messages locally too:
+Add the `conventional-pre-commit` hook to your `.pre-commit-config.yaml` with `stages:
+[commit-msg]`, and install the `commit-msg` hook type by default, so `pre-commit install` checks
+messages locally too:
 
 ```yaml
 default_install_hook_types: [pre-commit, commit-msg]
@@ -29,88 +21,68 @@ repos:
     hooks:
       - id: conventional-pre-commit
         stages: [commit-msg]
-        args: ["--force-scope"]  # require a scope: type(scope): subject
+        args: ["--force-scope"] # require a scope: type(scope): subject
 ```
 
-The action runs **your** hook, with your arguments, so the CI check and the local `commit-msg` hook
-always agree. It fails with a clear error if the hook is missing from `.pre-commit-config.yaml`.
-
-You also need `actions/checkout` fetching enough history to include both `from-ref` and `to-ref`:
-
-```yaml
-- uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-  with:
-    fetch-depth: 0
-```
+The action runs **your** hook, with your arguments. Each message is checked with `pre-commit run
+conventional-pre-commit --hook-stage commit-msg --commit-msg-filename <file> --files <file>`: the
+`--files` keeps pre-commit from stashing your unstaged changes, and the hook still gets only the
+message file. Your index is left byte for byte as it was: pre-commit's own `git diff` rewrites
+it when its stat data is stale, so it is saved before and put back after every run (and on an
+interruption); if that fails (a hook left `index.lock`), the action fails, keeps the saved copy
+under `$RUNNER_TEMP` and prints the command that restores it. It fails with a clear error when the
+hook is missing from `.pre-commit-config.yaml`,
+when it does not run at the `commit-msg` stage (no `stages: [commit-msg]`), when pre-commit fails
+without running it (an invalid config), when a ref is empty or not a commit (fetch the history with
+`fetch-depth: 0`), or when `working-directory` is not a directory inside the workspace. Merge
+commits are skipped; an empty range checks nothing and passes. The logic lives in
+`check-commits.sh`, tested by `check-commits.test.sh`.
 
 ## Inputs
 
-| Name | Required | Description |
-| --- | --- | --- |
-| `from-ref` | ✅ | Base git ref (e.g., PR base SHA) |
-| `to-ref` | ✅ | Head git ref (e.g., PR head SHA) |
-| `python-version` | ❌ | Python for `setup-python`; its resolved version is part of the cache key (default `3.x`) |
-| `pre-commit-version` | ❌ | pre-commit release to install, `X.Y.Z` (default `4.6.2`) |
-| `cache-key-prefix` | ❌ | First part of the pre-commit cache key (default `pre-commit`) |
+| Name | Required | Default | Description |
+| --- | --- | --- | --- |
+| `from-ref` | yes | – | The base commit of the range, such as the pull request's base SHA |
+| `to-ref` | yes | – | The head commit of the range, such as the pull request's head SHA |
+| `working-directory` | no | `.` | The caller repository, relative to the workspace: no absolute path, no `..` component. Its .pre-commit-config.yaml defines the hook and the cache key. |
+| `python-version` | no | `3.x` | The Python for setup-python, such as `3.x` or `3.13`. Its resolved version is part of the cache key, so keep it equal to the pre-commit warm-up's `python_version`. |
+| `pre-commit-version` | no | `4.6.2` | The pre-commit release to install, X.Y.Z. Keep it equal to the version the warm-up and the rest of CI install. |
+| `cache-key-prefix` | no | `pre-commit` | The first part of the pre-commit cache key, before `\|<runner.os>\|`. Keep it equal to the warm-up's `cache_key_prefix`. |
 
 ## Outputs
 
 | Name | Description |
 | --- | --- |
-| `exitcode` | Exit code of the validation (0 = all commits pass, 1 = violations found) |
+| `exitcode` | Exit code of the conventional-pre-commit validation (0 = all commits pass) |
+
+## Permissions
+
+`contents: read` only: nothing is posted.
 
 ## Usage
 
-Example workflow for pull requests:
-
 ```yaml
-name: Validate commit messages
-
 on:
   pull_request:
 
 jobs:
   conventional-commits:
     runs-on: ubuntu-latest
-
+    timeout-minutes: 15
+    permissions:
+      contents: read
     steps:
-      - name: Checkout
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           fetch-depth: 0
+          persist-credentials: false
 
-      - name: Validate commit messages
-        uses: leinardi/gha-pre-commit-reviewdog-actions/conventional-commits@<sha> # v1.x.y
+      - uses: leinardi/gha-pre-commit-reviewdog-actions/conventional-commits@<sha> # v2.0.0
         with:
           from-ref: ${{ github.event.pull_request.base.sha }}
           to-ref: ${{ github.event.pull_request.head.sha }}
 ```
 
-Merge commits are skipped. Only commits are checked, not the pull-request title: if squash merging
-is enabled, the title becomes the commit on the default branch and needs its own check.
-
-Outside `pull_request` events (for example a CI run dispatched on a release branch opened with
-`GITHUB_TOKEN`, which does not trigger `pull_request`), pass a branch range instead:
-
-```yaml
-      - name: Validate commit messages
-        uses: leinardi/gha-pre-commit-reviewdog-actions/conventional-commits@<sha> # v1.x.y
-        with:
-          from-ref: ${{ github.event.pull_request.base.sha || format('origin/{0}', github.event.repository.default_branch) }}
-          to-ref: ${{ github.event.pull_request.head.sha || github.sha }}
-```
-
-## Versioning
-
-Pin to a commit SHA with the version in a trailing comment (Dependabot keeps it current), or to the
-major version for automatic patch/minor updates:
-
-```yaml
-uses: leinardi/gha-pre-commit-reviewdog-actions/conventional-commits@v1
-```
-
-For fully reproducible behavior, pin to an exact tag:
-
-```yaml
-uses: leinardi/gha-pre-commit-reviewdog-actions/conventional-commits@v1.0.3
-```
+Composite actions cannot set a timeout on their steps, so set `timeout-minutes` on the job. The
+checkout must reach both commits (`fetch-depth: 0`). With `working-directory`, the caller
+repository can be checked out to a subdirectory (`path:` on the checkout).

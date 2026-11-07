@@ -20,36 +20,23 @@
 # OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 # SOFTWARE.
 
-{
-  source: {
-    name: "sqlfluff",
-    url: "https://github.com/sqlfluff/sqlfluff"
-  },
-  diagnostics: (
-    map(
-      . as $file
-      | $file.violations[] as $v
-      | {
-          message: $v.description,
-          code: {
-            value: $v.code,
-            url: "https://docs.sqlfluff.com/en/stable/rules.html#sqlfluff.core.rules.Rule_\($v.code)"
-          },
-          location: {
-            path: $file.filepath,
-            range: {
-              start: {
-                line: $v.start_line_no,
-                column: $v.start_line_pos
-              },
-              end: {
-                line: $v.end_line_no,
-                column: $v.end_line_pos
-              }
-            }
-          },
-          severity: (if $v.warning then "WARNING" else "ERROR" end)
-        }
-    )
-  )
-}
+# ruff's RDJSON output (`--output-format=rdjson`, pretty printed) to the one RDJSON document
+# reviewdog reads. Run by run-passes.sh as `jq -R -s -L lib --arg workspace <root> -f
+# ruff/rdjson.jq` on the hook's output.
+#
+# pre-commit may run the hook more than once on parts of the file list, so the output can hold
+# several documents: their diagnostics are concatenated, under the first one's source and
+# severity. Suggestions are removed, as in v1: ruff's suggested edits are made against the file
+# before `--fix` changed it, and the tree report already posts the fixes. A line outside a JSON
+# document, or a document that is not RDJSON, is an error.
+
+include "rdjson";
+
+json_documents
+| if (.other | length) > 0 then error("ruff printed a line outside its RDJSON output: \(.other[0][0:200])")
+  elif (.documents | length) == 0 then error("ruff printed no RDJSON document")
+  else
+    .documents
+    | map(rdjson_normalize($workspace))
+    | .[0] + {diagnostics: [.[].diagnostics[] | del(.suggestions)]}
+  end
