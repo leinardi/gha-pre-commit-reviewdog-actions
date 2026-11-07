@@ -396,6 +396,14 @@ hook lint 'exit 1'
 run "[$(one_pass check lint '{"source": "stdout", "format": "efm", "efm": ["%f:%l: %m"], "name": "test"}')]"
 check "a failed efm hook that printed nothing warns that no line could be annotated" \
 	eval '[[ ${STATUS} == 1 && $(out result) == failed ]] && grep -q "::warning::test: .*no line could be annotated" <<<"${LOG}"'
+# Recorded from ansible-lint on GitHub Actions: its pep8 line is coloured under --color=never,
+# with an OSC 8 hyperlink elsewhere in the output.
+new_case
+hook lint 'printf "\\e]8;;https://example.com/\\e\\\\docs\\e]8;;\\e\\\\\n\\e[35ma.txt\\e[0m\\e[2m:1:\\e[0m \\e[31m\\e[1mname[missing][/]: All tasks should be named.\\e[0m\\e[0m\n"; exit 1'
+run "[$(one_pass check lint '{"source": "stdout", "format": "efm", "efm": ["%f:%l:%c: %m", "%f:%l: %m"], "name": "test"}')]"
+check "a coloured efm line is matched and posted without its escape sequences" \
+	eval '[[ ${STATUS} == 1 && $(out findings) == 1 ]] && [[ "$(cat "${STUB_DIR}/reviewdog-1.in")" == "docs${NL}a.txt:1: name[missing][/]: All tasks should be named." ]]'
+
 new_case
 hook lint 'echo "a.txt:1: bad"; exit 1'
 run "[$(one_pass check lint '{"source": "stdout", "format": "efm", "efm": ["%f:%l: %m", "%-G%.%#"], "name": "test", "level": "warning"}')]"

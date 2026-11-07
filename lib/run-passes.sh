@@ -846,7 +846,13 @@ build_report() {
 	local count
 	case "${format}" in
 	efm)
-		cp -- "${out}" "${report}"
+		# Some tools colour their lines even under --color=never (ansible-lint does on GitHub
+		# Actions), and a coloured line matches no pattern: escape sequences are removed first.
+		if ! jq -R -r -L "${LIB_DIR}" 'include "rdjson"; strip_ansi' <"${out}" >"${report}"; then
+			rm -f -- "${report}"
+			error "pass ${id}: the hook output for ${name} could not be read (capture failed)"
+			return 1
+		fi
 		local pattern
 		jq -j '.efm[] | . + "\u0000"' <<<"${r}" >"${report}.patterns"
 		while IFS= read -r -d '' pattern; do
