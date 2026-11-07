@@ -78,8 +78,12 @@ Markdown are never governed; the make-common files above are exempt.
   the job at their `-fail-level` (`info` for most, `error` for a few); `conventional-commits` checks
   every commit and exits non-zero if any of them fails. Whether a failing job blocks the merge is
   decided by the caller's required checks, not here.
-- The pre-commit cache key is `pre-commit|<os>|hash(.pre-commit-config.yaml)`, the same key
-  `gh-reusable-workflows`' `pre-commit-warmup.yaml` fills. Change both or neither.
+- **The pre-commit cache is restore-only.** Every action sets up Python (`python-version`),
+  installs a pinned pre-commit (`pre-commit-version`) and restores
+  `<cache-key-prefix>|<os>|<resolved Python>|hash(.pre-commit-config.yaml)` with
+  `actions/cache/restore`, falling back to the newest entry for the same OS and Python. That is
+  the key `gh-reusable-workflows`' `pre-commit-warmup.yaml` saves on the default branch, its only
+  writer. Change both or neither, and keep the defaults equal to the warm-up's.
 
 ## Commit messages
 
