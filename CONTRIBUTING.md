@@ -56,3 +56,9 @@ commits, or pass one; tick *dry run* first to see what it would do. It calls
 [`simple-tag-and-release`](https://github.com/leinardi/gh-reusable-workflows/blob/main/.github/workflows/simple-tag-and-release.md)
 from `gh-reusable-workflows`, which creates the release and moves the major tag (`v2`) and
 `latest`. Callers pin a SHA, so Dependabot proposes the release to them; `v1` stays where it is.
+
+Merging a Dependabot pull request that bumps a shipped pin (`fix(deps)`) releases the next patch on
+its own, through the same workflow, when nothing else is unreleased, the change only moves existing
+action pins and CI passes on the merge. With other work unreleased, it leaves a notice and the
+release to you. See
+[`dependabot-release`](https://github.com/leinardi/gh-reusable-workflows/blob/main/.github/workflows/dependabot-release.md).
