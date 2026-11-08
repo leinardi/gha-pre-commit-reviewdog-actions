@@ -43,10 +43,11 @@ assignees: []
 
 <!-- Fill in what makes sense for your question, or remove fields that don't apply. -->
 
-* Project version / commit SHA: `?`
-* Operating system and version: `?`
-* Runtime and version (e.g., Node, Python, Java): `?`
-* Any relevant tooling / dependencies and versions: `?`
+* Action and the version you pin (tag or SHA): `?`
+* `pre-commit-version` input and the hook's `rev`: `?`
+* `reporter` input (`github-pr-review`, `github-check`, `local`): `?`
+* Link to the failing run: `?`
+* Runner (`ubuntu-latest`, self-hosted, ...): `?`
 
 ---
 

@@ -9,16 +9,17 @@ assignees: []
 
 * [ ] I have checked that there are no duplicate active or recent issues (bugs, questions, or
   feature requests) describing this problem.
-* [ ] I am using the latest released version of this project (or have tested on the main/default
-  branch).
+* [ ] I am using the latest released version of gha-pre-commit-reviewdog-actions (or have tested on
+  the main/default branch).
+* [ ] This is not a security vulnerability (those go through the private process in SECURITY.md).
 
 ## Step 2: Describe your environment
 
-* Project name / repository: `?`
-* Project version / commit SHA: `?`
-* Operating system and version: `?`
-* Runtime and version (e.g., Node, Python, Java): `?`
-* Any relevant tooling or dependencies and versions: `?`
+* Action and the version you pin (tag or SHA): `?`
+* `pre-commit-version` input and the hook's `rev`: `?`
+* `reporter` input (`github-pr-review`, `github-check`, `local`): `?`
+* Link to the failing run: `?`
+* Runner (`ubuntu-latest`, self-hosted, ...): `?`
 
 ## Step 3: Describe the problem
 
@@ -44,8 +45,8 @@ assignees: []
 
 <!-- Paste the smallest possible code or config snippet that reproduces the issue. -->
 
-```text
-// Example snippet (replace with your own)
+```yaml
+# Example snippet (replace with your own)
 ```
 
 ### Error / log output
