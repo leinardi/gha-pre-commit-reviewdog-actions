@@ -7,12 +7,16 @@ then install the hooks once with `make pre-commit-install`. It installs both the
 the `commit-msg` hooks, so commit messages are checked when you commit.
 
 `make check` runs the full pre-commit suite on every file, `make check-stage` on the staged files
-only.
+only, and `make test` the script and converter tests (`*/*.test.sh`: stub pre-commit and
+reviewdog, real git in temporary repositories, no network). Both must pass.
 
 To add an action, follow "Adding a new action" in the [README](README.md). An action runs in other
-repositories with their token: read [AGENTS.md](AGENTS.md) for the invariants a change must keep,
-and update the action's `README.md` in the same pull request. CI runs every generic action on this
-repository's own code, from the branch, so a pull request exercises its own changes.
+repositories, on their worktree, with their token: read [AGENTS.md](AGENTS.md) for the invariants a
+change must keep (the worktree is left as found, fail closed, inputs through `env:`, everything
+pinned), and update the action's `README.md` in the same pull request. A script or converter change
+comes with a test case that fails without it. CI runs every action the way a caller does, on a
+generated caller repository (`tests/self-test/`), and the generic ones on this repository's own
+code, from the branch, so a pull request exercises its own changes.
 
 ## Commit messages
 
@@ -37,8 +41,9 @@ The release version is derived from these types, since the last release:
 | none | everything else: `build`, `chore`, `ci`, `docs`, `perf`, `refactor`, `style`, `test`, `revert` | `docs(readme): fix a link` |
 
 Pick the type by whether callers should receive the change, not by what kind of change it is:
-anything that changes what a caller runs is a `fix` (or `feat`). A breaking change is a new `v2`,
-never a change inside `v1`.
+anything that changes what a caller runs (an `action.yaml`, `lib/`, a converter or an action
+script) is a `fix` (or `feat`). A breaking change is a new major version, never a change inside
+`v2`.
 
 Pull requests are merged with merge commits; squash and rebase merging are disabled. Every commit
 therefore lands on `main` as it is, so each one needs a correct type, not just the pull request as a
@@ -49,5 +54,5 @@ whole.
 Dispatch the **Release** workflow from `main`. Leave the version empty to derive it from the
 commits, or pass one; tick *dry run* first to see what it would do. It calls
 [`simple-tag-and-release`](https://github.com/leinardi/gh-reusable-workflows/blob/main/.github/workflows/simple-tag-and-release.md)
-from `gh-reusable-workflows`, which creates the release and moves `v1` and `latest`. Every `@v1`
-caller picks the release up immediately.
+from `gh-reusable-workflows`, which creates the release and moves the major tag (`v2`) and
+`latest`. Callers pin a SHA, so Dependabot proposes the release to them; `v1` stays where it is.

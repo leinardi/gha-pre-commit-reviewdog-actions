@@ -1,3 +1,5 @@
+#!/usr/bin/env bash
+#
 # MIT License
 #
 # Copyright (c) 2026 Roberto Leinardi
@@ -19,37 +21,37 @@
 # LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 # OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 # SOFTWARE.
+#
+# Runs the script tests: lib/*.test.sh (the pass runner, the snapshot library, the reviewdog
+# installer) and each <action>/*.test.sh, one after the other, and fails if any of them fails or
+# if there is none at all. Each test file is self-contained: it stubs the commands it needs
+# (pre-commit, reviewdog, curl, ...) on PATH, uses real git only in temporary repositories, and
+# never touches the network.
+#
+# Untracked test files are included (but not ignored ones), so a new test runs before its first
+# commit.
 
-{
-  source: {
-    name: "sqlfluff",
-    url: "https://github.com/sqlfluff/sqlfluff"
-  },
-  diagnostics: (
-    map(
-      . as $file
-      | $file.violations[] as $v
-      | {
-          message: $v.description,
-          code: {
-            value: $v.code,
-            url: "https://docs.sqlfluff.com/en/stable/rules.html#sqlfluff.core.rules.Rule_\($v.code)"
-          },
-          location: {
-            path: $file.filepath,
-            range: {
-              start: {
-                line: $v.start_line_no,
-                column: $v.start_line_pos
-              },
-              end: {
-                line: $v.end_line_no,
-                column: $v.end_line_pos
-              }
-            }
-          },
-          severity: (if $v.warning then "WARNING" else "ERROR" end)
-        }
-    )
-  )
-}
+set -euo pipefail
+
+cd "$(git rev-parse --show-toplevel)"
+
+mapfile -t tests < <(git ls-files --cached --others --exclude-standard -- '*/*.test.sh' | LC_ALL=C sort -u)
+if [[ ${#tests[@]} -eq 0 ]]; then
+	echo "No */*.test.sh files found: nothing to test." >&2
+	exit 1
+fi
+
+failed=()
+for test in "${tests[@]}"; do
+	echo "== ${test}"
+	if ! bash "${test}"; then
+		failed+=("${test}")
+	fi
+done
+
+if [[ ${#failed[@]} -gt 0 ]]; then
+	echo "Failed:" >&2
+	printf '  %s\n' "${failed[@]}" >&2
+	exit 1
+fi
+echo "All ${#tests[@]} test files passed."

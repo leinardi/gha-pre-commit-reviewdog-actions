@@ -1,104 +1,124 @@
-# Run actionlint via pre-commit + reviewdog
+# actionlint
 
-This GitHub Action runs the [`actionlint-oneline`](https://github.com/rhysd/actionlint)
-[`pre-commit`](https://pre-commit.com/) hook on a diff range and reports results to pull requests
-using [reviewdog](https://github.com/reviewdog/reviewdog).
+Runs the caller's `actionlint-oneline` [pre-commit](https://pre-commit.com/) hook
+([actionlint](https://github.com/rhysd/actionlint)) on the workflow files changed between two
+commits and posts each finding as a review comment through
+[reviewdog](https://github.com/reviewdog/reviewdog). Findings are errors; the ones actionlint
+reports from ShellCheck keep ShellCheck's level (error, warning, info, style).
 
-Typical use case:
+## What it runs and posts
 
-- Run `actionlint-oneline` on changed workflow files
-- Annotate problems directly on the PR diff
-- Fail the job if violations are found
+- **lint**: `actionlint-oneline` at the `manual` stage. Posts:
+  - `actionlint`: the diagnostics the hook printed, converted to RDJSON by `actionlint/rdjson.jq`,
+    as review comments
+  - `actionlint (lint fixes)`: the changes its hooks made to the files, as suggestions
 
 ## Requirements
 
-Add the `actionlint` hooks to your `.pre-commit-config.yaml`, including the `actionlint-oneline`
-alias with the `manual` stage:
+Declare these hooks in the caller's `.pre-commit-config.yaml` (the action runs your hook ids and
+aliases, with your arguments, so CI and the local hooks agree):
 
 ```yaml
 repos:
   - repo: https://github.com/rhysd/actionlint
-    rev: v1.7.8
+    rev: v1.7.12
     hooks:
       - id: actionlint
         name: actionlint
         files: ^\.github/workflows/.*\.(yml|yaml)$
-        args: ["-shellcheck"]
+        args: ["-shellcheck", "shellcheck -S error"]
       - id: actionlint
         alias: actionlint-oneline
         name: actionlint (one line per one error)
         files: ^\.github/workflows/.*\.(yml|yaml)$
-        args: ["-oneline", "-shellcheck"]
+        args: ["-oneline", "-shellcheck", "shellcheck -S error"]
         stages: [manual]
-````
-
-You also need:
-
-- GitHub Actions enabled on the repository
-- `secrets.GITHUB_TOKEN` available (default on GitHub-hosted runners)
-- `actions/checkout` fetching enough history to include both `from-ref` and `to-ref`, for example:
-
-```yaml
-- uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-  with:
-    fetch-depth: 0
 ```
+
+## How it runs
+
+The files are the ones changed between `from-ref` and `to-ref`, computed as `pre-commit run
+--from-ref/--to-ref` would (`git diff FROM...TO`, deletions dropped), and passed with `--files`:
+pre-commit never stashes your unstaged changes, and a hook's fixes are never rolled back. With no
+changed file, nothing runs and `result` is `skipped`. Each pass starts from a snapshot of the
+worktree, and the worktree is restored to it, and verified, before anything is posted. See the
+[root README](../README.md#conventions) for what that guarantee covers.
+
+The job fails when a hook fails (`result=failed`) or when something operational goes wrong
+(`result=error`: a missing hook id, a report that cannot be read, a reviewdog failure, a restore
+that cannot be verified, a setup step that failed); the log says which. reviewdog runs with
+`-fail-level=none`, so it only posts. `findings` counts what was posted (diagnostics plus diff
+hunks). No token reaches a hook: `github-token` goes to reviewdog only (and, in tofu-tflint, to
+setup-tflint).
+
+For debugging, `reports-dir` names an existing directory outside the caller repository (for
+example `${{ runner.temp }}/reports`) that receives every report exactly as reviewdog got it, plus
+`reports.json`; upload it as an artifact to see what would have been posted.
+
+The `-oneline` output is converted by `actionlint/rdjson.jq`. A line in any other format (an
+actionlint crash, a config error) is an operational error (`result=error`), never dropped.
 
 ## Inputs
 
-| Name | Required | Description |
-| --- | --- | --- |
-| `from-ref` | ✅ | Base git ref (e.g. PR base SHA) |
-| `to-ref` | ✅ | Head git ref (e.g. PR head SHA) |
-| `github-token` | ✅ | GitHub token for reviewdog (`secrets.GITHUB_TOKEN`) |
-| `python-version` | ❌ | Python for `setup-python`; its resolved version is part of the cache key (default `3.x`) |
-| `pre-commit-version` | ❌ | pre-commit release to install, `X.Y.Z` (default `4.6.2`) |
-| `cache-key-prefix` | ❌ | First part of the pre-commit cache key (default `pre-commit`) |
+| Name | Required | Default | Description |
+| --- | --- | --- | --- |
+| `from-ref` | yes | – | The base commit of the range, such as the pull request's base SHA |
+| `to-ref` | yes | – | The head commit of the range, such as the pull request's head SHA |
+| `github-token` | no | `""` | The token reviewdog posts with, usually secrets.GITHUB_TOKEN. Required unless reporter is local. |
+| `working-directory` | no | `.` | The caller repository, relative to the workspace: a git work tree root, no absolute path, no `..` component. Its .pre-commit-config.yaml defines the hooks and the cache key. |
+| `reporter` | no | `github-pr-review` | reviewdog's reporter: github-pr-review, github-check or local |
+| `python-version` | no | `3.x` | The Python for setup-python, such as `3.x` or `3.13`. Its resolved version is part of the cache key, so keep it equal to the pre-commit warm-up's `python_version`. |
+| `pre-commit-version` | no | `4.6.2` | The pre-commit release to install, X.Y.Z. Keep it equal to the version the warm-up and the rest of CI install. |
+| `cache-key-prefix` | no | `pre-commit` | The first part of the pre-commit cache key, before `\|<runner.os>\|`. Keep it equal to the warm-up's `cache_key_prefix`. |
+| `reports-dir` | no | `""` | For debugging and the self-tests: an absolute path to an existing, writable directory outside the caller repository that receives every report exactly as reviewdog gets it, plus reports.json. Empty: no copy is kept. |
 
 ## Outputs
 
 | Name | Description |
 | --- | --- |
-| `exitcode` | Exit code of the `actionlint-oneline` hook |
+| `exitcode` | pre-commit's first nonzero exit status across the passes, else 0; empty when a setup step failed |
+| `result` | passed, failed (a hook found problems), skipped (no changed files or none matched) or error (an operational failure, including a setup step that failed before the hooks could run) |
+| `ran` | true when at least one hook ran on files; false when none did or a setup step failed |
+| `findings` | The number of findings posted: diagnostics plus diff hunks, across every report. Empty when a setup step failed before the hooks ran. |
+| `lint-exitcode` | pre-commit's exit status in the lint pass (actionlint-oneline); empty when the pass did not run |
+
+## Permissions
+
+```yaml
+permissions:
+  contents: read
+  pull-requests: write # reporter github-pr-review (the default)
+  # checks: write      # reporter github-check instead
+```
+
+`reporter: local` prints the findings in the log and needs neither, nor a `github-token`.
 
 ## Usage
 
-Example workflow for pull requests:
-
 ```yaml
-name: Lint workflows with actionlint
-
 on:
   pull_request:
 
 jobs:
   actionlint:
     runs-on: ubuntu-latest
-
+    timeout-minutes: 15
+    permissions:
+      contents: read
+      pull-requests: write
     steps:
-      - name: Checkout
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           fetch-depth: 0
+          persist-credentials: false
 
-      - name: Run actionlint via pre-commit + reviewdog
-        uses: leinardi/gha-pre-commit-reviewdog-actions/actionlint@v1
+      - uses: leinardi/gha-pre-commit-reviewdog-actions/actionlint@<sha> # v2.0.0
         with:
           from-ref: ${{ github.event.pull_request.base.sha }}
           to-ref: ${{ github.event.pull_request.head.sha }}
           github-token: ${{ secrets.GITHUB_TOKEN }}
 ```
 
-## Versioning
-
-It’s recommended to pin to the major version:
-
-```yaml
-uses: leinardi/gha-pre-commit-reviewdog-actions/actionlint@v1
-```
-
-For fully reproducible behavior, pin to an exact tag:
-
-```yaml
-uses: leinardi/gha-pre-commit-reviewdog-actions/actionlint@v1.0.3
-```
+Composite actions cannot set a timeout on their steps, so set `timeout-minutes` on the job. The
+checkout must reach both commits (`fetch-depth: 0`). With `working-directory`, the caller
+repository can be checked out to a subdirectory (`path:` on the checkout).

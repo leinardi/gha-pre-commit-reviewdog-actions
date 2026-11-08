@@ -1,5 +1,8 @@
-name: "Run pre-commit hooks + reviewdog diff"
-description: "Runs one or more pre-commit hooks on a ref range and, if fixes occur, posts the diff via reviewdog"
+name: "Run pre-commit hooks via pre-commit + reviewdog"
+description: >-
+  Runs a list of the caller's pre-commit hooks (pre-commit-hooks' whitespace, end-of-file and
+  config checks by default) on the files changed between two commits, in one pass, and posts their
+  fixes through reviewdog.
 author: "leinardi"
 branding:
   icon: "check-circle"
@@ -7,28 +10,27 @@ branding:
 
 inputs:
   from-ref:
-    description: "Base git ref (e.g., PR base SHA)"
+    description: "The base commit of the range, such as the pull request's base SHA"
     required: true
   to-ref:
-    description: "Head git ref (e.g., PR head SHA)"
+    description: "The head commit of the range, such as the pull request's head SHA"
     required: true
   github-token:
-    description: "GitHub token for reviewdog (usually secrets.GITHUB_TOKEN)"
-    required: true
-  hooks:
-    description: |
-      Newline-separated list of pre-commit hook IDs to run.
-      If not set, a sensible default set of core hooks is used.
+    description: >-
+      The token reviewdog posts with, usually secrets.GITHUB_TOKEN. Required unless reporter is
+      local.
     required: false
-    default: |
-      check-merge-conflict
-      end-of-file-fixer
-      trailing-whitespace
-      check-yaml
-      check-json
-      check-toml
-      check-added-large-files
-
+    default: ""
+  working-directory:
+    description: >-
+      The caller repository, relative to the workspace: a git work tree root, no absolute path, no
+      `..` component. Its .pre-commit-config.yaml defines the hooks and the cache key.
+    required: false
+    default: "."
+  reporter:
+    description: "reviewdog's reporter: github-pr-review, github-check or local"
+    required: false
+    default: "github-pr-review"
   python-version:
     description: >-
       The Python for setup-python, such as `3.x` or `3.13`. Its resolved version is part of the
@@ -47,15 +49,75 @@ inputs:
       warm-up's `cache_key_prefix`.
     required: false
     default: "pre-commit"
+  reports-dir:
+    description: >-
+      For debugging and the self-tests: an absolute path to an existing, writable directory outside
+      the caller repository that receives every report exactly as reviewdog gets it, plus
+      reports.json. Empty: no copy is kept.
+    required: false
+    default: ""
+  hooks:
+    description: >-
+      The hook ids or aliases to run, one per line, in order, all in one pass at the pre-commit
+      stage. Blank lines and lines starting with # are skipped; each id must match
+      `^[A-Za-z0-9_][A-Za-z0-9_.-]*$` and appear once.
+    required: false
+    default: |
+      check-merge-conflict
+      end-of-file-fixer
+      trailing-whitespace
+      check-yaml
+      check-json
+      check-toml
+      check-added-large-files
 
 outputs:
   exitcode:
-    description: "Non-zero if any hook failed or modified files"
-    value: ${{ steps.pre_commit_hooks.outputs.exitcode }}
+    description: "pre-commit's first nonzero exit status across the passes, else 0; empty when a setup step failed"
+    value: ${{ steps.run.outputs.exitcode }}
+  result:
+    description: >-
+      passed, failed (a hook found problems), skipped (no changed files or none matched) or error
+      (an operational failure, including a setup step that failed before the hooks could run)
+    value: ${{ steps.run.outputs.result || 'error' }}
+  ran:
+    description: "true when at least one hook ran on files; false when none did or a setup step failed"
+    value: ${{ steps.run.outputs.ran || 'false' }}
+  findings:
+    description: >-
+      The number of findings posted: diagnostics plus diff hunks, across every report. Empty when a
+      setup step failed before the hooks ran.
+    value: ${{ steps.run.outputs.findings }}
+  hooks-exitcode:
+    description: "pre-commit's exit status in the hooks pass (the hooks in `hooks`); empty when the pass did not run"
+    value: ${{ steps.run.outputs.hooks-exitcode }}
 
 runs:
   using: "composite"
   steps:
+    # Only what is missing is installed, so a hosted runner skips apt-get entirely; jq is what
+    # lib/run-passes.sh and the converters run on.
+    - name: Install missing system tools
+      shell: bash
+      env:
+        TOOLS: "jq"
+      run: |
+        set -euo pipefail
+        read -ra tools <<<"$TOOLS"
+        missing=()
+        for tool in "${tools[@]}"; do
+          command -v "$tool" >/dev/null || missing+=("$tool")
+        done
+        if [[ ${#missing[@]} -gt 0 ]]; then
+          if ! command -v apt-get >/dev/null; then
+            echo "::error::pre-commit-hooks: ${missing[*]} is not on PATH and there is no apt-get to install it; install it before this action"
+            exit 1
+          fi
+          echo "Installing ${missing[*]} with apt-get"
+          sudo apt-get update
+          sudo apt-get install -y "${missing[@]}"
+        fi
+
     # The hook environments are virtualenvs bound to the interpreter that built them, so the
     # Python is set up here and its resolved version is part of the cache key, as in
     # gh-reusable-workflows' pre-commit-warmup.yaml.
@@ -74,7 +136,11 @@ runs:
         # A pinned release only: the value becomes a pip requirement, so anything but X.Y.Z (an
         # empty value, a range, an option) is refused rather than handed to pip.
         if ! [[ "$PRE_COMMIT_VERSION" =~ ^(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$ ]]; then
-          echo "::error title=Invalid pre-commit-version::pre-commit-version must be X.Y.Z, got '$PRE_COMMIT_VERSION'."
+          # Escaped as workflow-command data, so the value cannot end the message early.
+          got="${PRE_COMMIT_VERSION//'%'/%25}"
+          got="${got//$'\r'/%0D}"
+          got="${got//$'\n'/%0A}"
+          echo "::error title=Invalid pre-commit-version::pre-commit-version must be X.Y.Z, got '$got'."
           exit 1
         fi
         python -m pip install --disable-pip-version-check --no-cache-dir "pre-commit==$PRE_COMMIT_VERSION"
@@ -87,68 +153,32 @@ runs:
       uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
       with:
         path: ~/.cache/pre-commit
-        key: ${{ inputs.cache-key-prefix }}|${{ runner.os }}|${{ steps.python.outputs.python-version }}|${{ hashFiles('.pre-commit-config.yaml') }}
+        key: ${{ inputs.cache-key-prefix }}|${{ runner.os }}|${{ steps.python.outputs.python-version }}|${{ hashFiles(format('{0}/.pre-commit-config.yaml', inputs.working-directory)) }}
         restore-keys: |
           ${{ inputs.cache-key-prefix }}|${{ runner.os }}|${{ steps.python.outputs.python-version }}|
 
-    - name: Setup reviewdog binary
-      uses: reviewdog/action-setup@d8a7baabd7f3e8544ee4dbde3ee41d0011c3a93f # v1.5.0
-      with:
-        reviewdog_version: v0.21.2 # pinned by hand: Dependabot does not track this input
+    # A pinned reviewdog, checked against its SHA-256, under RUNNER_TEMP (lib/setup-reviewdog.sh).
+    - name: Set up reviewdog
+      shell: bash
+      run: |
+        set -euo pipefail
+        "$GITHUB_ACTION_PATH/../lib/setup-reviewdog.sh"
 
-    - name: Run pre-commit hooks
-      id: pre_commit_hooks
+    # One step runs every pass: lib/run-passes.sh snapshots the worktree, runs the hooks on the
+    # changed files, builds the reports, restores and verifies the worktree, then posts through
+    # reviewdog. PASSES is this action's static pass list (see lib/run-passes.sh for its shape).
+    - name: Run pre-commit-hooks
+      id: run
       shell: bash
       env:
+        ACTION_NAME: pre-commit-hooks
         FROM_REF: ${{ inputs.from-ref }}
         TO_REF: ${{ inputs.to-ref }}
-        HOOKS_INPUT: ${{ inputs.hooks }}
-      run: |
-        set +e
-        set -o pipefail
-
-        exitcode=0
-
-        # Read hooks from the multi-line input; ignore empty lines and comments (# ...)
-        echo "$HOOKS_INPUT" | while IFS= read -r hook; do
-          hook="${hook#"${hook%%[![:space:]]*}"}"   # trim leading spaces
-          hook="${hook%"${hook##*[![:space:]]}"}"   # trim trailing spaces
-          [[ -z "$hook" ]] && continue
-          [[ "$hook" =~ ^# ]] && continue
-
-          echo "::group::Running pre-commit hook: $hook"
-          pre-commit run "$hook" \
-            --from-ref "$FROM_REF" \
-            --to-ref   "$TO_REF"
-          rc=$?
-          echo "::endgroup::"
-
-          [[ $rc -ne 0 ]] && exitcode=1
-        done
-
-        # Capture any fixes as a diff (even if hooks didn't error but fixed files)
-        git diff > pre-commit-hooks.diff || true
-
-        echo "exitcode=$exitcode" >> "$GITHUB_OUTPUT"
-
-        # Do not fail here; let reviewdog decide
-        exit 0
-
-    - name: Report pre-commit fixes via reviewdog
-      if: steps.pre_commit_hooks.outputs.exitcode != '0'
-      env:
+        WORKING_DIRECTORY: ${{ inputs.working-directory }}
+        REPORTER: ${{ inputs.reporter }}
         REVIEWDOG_GITHUB_API_TOKEN: ${{ inputs.github-token }}
-      continue-on-error: true
-      shell: bash
+        REPORTS_DIR: ${{ inputs.reports-dir }}
+        HOOKS: ${{ inputs.hooks }}
       run: |
-        reviewdog \
-          -name="pre-commit (fixes)" \
-          -f=diff \
-          -f.diff.strip=1 \
-          -reporter=github-pr-review \
-          -filter-mode=nofilter < pre-commit-hooks.diff
-
-    - name: Fail on pre-commit issues
-      if: steps.pre_commit_hooks.outputs.exitcode != '0'
-      shell: bash
-      run: exit 1
+        set -euo pipefail
+        "$GITHUB_ACTION_PATH/pre-commit-hooks.sh"
