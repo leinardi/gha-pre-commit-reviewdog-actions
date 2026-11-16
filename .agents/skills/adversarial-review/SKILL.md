@@ -15,47 +15,27 @@ description: >
 
 You are a hostile reviewer. Assume the change is **wrong until proven right**. Each action runs
 in other repositories, on their worktree, with their token, at the next release: a defect ships
-to every caller. Find the input, diff or repository layout where it breaks. A review that finds nothing
-is only credible after you tried to break it and failed.
+to every caller. Find the input, diff or repository layout where it breaks. A review that finds
+nothing is only credible after you tried to break it and failed.
 
-Copy this checklist and tick items as you go:
+## Scope
 
-```text
-Review progress:
-- [ ] 1. Diff and intent established (default scope if none given)
-- [ ] 2. AGENTS.md and the contracts it names read
-- [ ] 3. Repository invariants checked
-- [ ] 4. Adversarial passes run
-- [ ] 5. Findings confirmed or dropped; gates run
-- [ ] 6. Report written
-```
-
-## 1. Establish the diff
-
-With no scope given, review the uncommitted work; if the tree is clean, review the branch
-against `main`.
-
-| User intent | Command |
-| --- | --- |
-| "my work" / uncommitted | `git status`, then `git diff HEAD`; read untracked files too |
-| staged changes only | `git diff --staged` |
-| a branch / "this PR" | `git diff main...HEAD` |
-| a commit range | `git diff <base>..<head>` |
-| a GitHub PR number | `gh pr diff <n>` and `gh pr view <n>` |
-
-Read every changed `action.yaml` in full, its `README.md`, its converter (`<action>/rdjson.jq`)
-and scripts, and the parts of `lib/` they rely on (`run-passes.sh`'s header is the contract).
+When invoked directly: review the scope the user gives (`gh pr view <n>` for intent, then `gh pr
+diff <n>`); with none, the uncommitted work (`git diff HEAD` plus untracked files); on a clean
+tree, `git diff main...HEAD`. Read every changed `action.yaml` in full, its `README.md`, its
+converter (`<action>/rdjson.jq`) and scripts, and the parts of `lib/` they rely on
+(`run-passes.sh`'s header is the contract).
 
 Also read `git log --oneline` for the range and any linked issue or pull request body: the stated
 **intent** is what you check the change against. A change that works but does something other
 than what it claims is a finding.
 
-## 2. Load project authority
+## Authority
 
 Read `AGENTS.md` first. Each action's `README.md` is its public contract (hook alias the caller
 must declare, inputs, outputs): behaviour and README must agree.
 
-## 3. Repository invariants — check on every review
+## Repository invariants
 
 ### Callers of `v2`
 
@@ -113,7 +93,27 @@ must declare, inputs, outputs): behaviour and README must agree.
   an empty or invalid range or `working-directory` fails loudly, and a missing hook is reported
   as such.
 
-## 4. Adversarial passes
+### Repository checks
+
+- A change to `scripts/check-license-headers.sh` must still fail, and name the file, when a
+  header is removed from one governed file.
+- A change to `.github/workflows/ci.yaml` keeps `ci-result` needing every job.
+- A new or changed `lib/`, converter or action-script behaviour has a test case that fails when
+  the change is broken on purpose; a converter case uses output recorded from the real tool.
+- Any `action.yaml` change keeps `lib/action-passes.test.sh` valid (it checks the structure and
+  `PASSES`), and the action's self-test in `tests/self-test/` runs it on a real runner in CI.
+
+### Commits and releases
+
+Each commit's type must match whether the change ships (`AGENTS.md`, Commit messages). The
+Release workflow derives the version with `svu` from the commits since the last tag, and every
+caller's Dependabot proposes it. A change to what a caller runs (an `action.yaml`, `lib/`, a
+converter or an action script) typed `chore`, `ci`, `docs` or `refactor` never ships; a
+repository-only change typed `fix` or `feat` cuts a release callers did not need; a stray `!` or
+`BREAKING CHANGE:` footer cuts a major. Pull requests land as merge
+commits, so every commit counts, not only the title.
+
+## Adversarial passes
 
 - **Correctness:** wrong alias, `--from-ref`/`--to-ref` swapped, a step output never written on
   an early exit.
@@ -122,36 +122,30 @@ must declare, inputs, outputs): behaviour and README must agree.
 - **Contract drift:** root `README.md` table, action `README.md` (inputs and outputs tables equal
   to `action.yaml`), `dependabot.yml` directories, the self-test in `tests/self-test/` and the CI
   matrices all list a new or renamed action.
-- **Commit type:** each commit's type must match whether the change ships (`AGENTS.md`, Commit
-  messages). The Release workflow derives the version with `svu` from the commits since the last
-  tag, and every caller's Dependabot proposes it. A change to what a caller runs (an
-  `action.yaml`, `lib/`, a converter or an action script) typed `chore`, `ci`, `docs` or
-  `refactor` never ships; a repository-only change typed `fix` or `feat` cuts a release callers did
-  not need; a stray `!` or `BREAKING CHANGE:` footer cuts a major. Pull requests land as merge
-  commits, so every commit counts, not only the title.
 - **A check that can no longer fail:** a hook, script or CI job is only worth its green if it
   still fails on what it exists to stop. Make the guarded thing go wrong (drop a license header,
   dirty a file in `pre-commit-all`, fail a job `ci-result` needs) and see whether it still
   notices. A check that passes because its file list is empty, its hook never ran, its job was
   skipped or a `|| true` swallowed the exit status is a false pass.
 
-For each candidate finding, reproduce it or trace the failing input end to end. If that confirms
-it, report it; if not, dig once more, then drop it. No named input and wrong result, no finding.
+## Gates
 
-## 5. Verify
+Do not re-run the repository's gates (`make check`, `make test`). The implementer is expected to run
+them and CI runs them again, but do not assume either happened: report the verification evidence you
+actually have (under adversarial-review-loop, `verification.txt` when supplied, which is the
+implementer's claim and not proof; when invoked directly, the CI status or gate output in the PR or
+session) and what is missing, such as a change to `lib/`, a converter or an action script with no
+test case that fails on the old code (a converter case uses output recorded from the real tool), or
+an `action.yaml` change with no `lib/action-passes.test.sh` or self-test result. What only a real
+runner shows (a real reviewdog post, the real tool's output on a hosted image) is covered by the CI
+self-tests: say so when the change depends on it. Never say that a check you did not see passed.
+Judge whether the change's tests prove it: a behaviour change needs a test that fails on the old
+code. When invoked directly, one focused command (one hook: `pre-commit run <hook-id> --files
+<file>`, for a hook that checks only the files it is given; one test: `bash
+lib/action-passes.test.sh`) may be run to confirm a single suspected finding, never a full suite or
+gate. A candidate that is neither reproduced nor traced end to end is dropped.
 
-| Diff touched | Run |
-| --- | --- |
-| anything | `make check` and `make test` |
-| `lib/`, a converter, an action script | break the change on purpose and see a test case fail; a converter case uses output recorded from the real tool |
-| any `action.yaml` | `make test` (`lib/action-passes.test.sh` validates its structure and `PASSES`); its self-test in `tests/self-test/` runs it on a real runner in CI |
-| `scripts/check-license-headers.sh` | `scripts/check-license-headers.sh`, then again with a header removed from one governed file: it must fail and name it |
-| `.github/workflows/ci.yaml` | `pre-commit run actionlint --all-files`; `ci-result` still needs every job |
-
-What only a real runner shows (a real reviewdog post, the real tool's output on a hosted image)
-is covered by the CI self-tests: say so when the change depends on it.
-
-## 6. Report
+## Report
 
 Rank worst first:
 
@@ -161,4 +155,5 @@ Rank worst first:
   Fix: <the specific change>
 ```
 
-End with a verdict: **block**, **approve with nits**, or **approve**, and the gates you ran.
+End with a verdict (**block**, **approve with nits** or **approve**) and one line:
+`Verification evidence: seen … / missing …`.
