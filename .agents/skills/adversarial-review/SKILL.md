@@ -138,10 +138,11 @@ session) and what is missing, such as a change to `lib/`, a converter or an acti
 test case that fails on the old code (a converter case uses output recorded from the real tool), or
 an `action.yaml` change with no `lib/action-passes.test.sh` or self-test result. What only a real
 runner shows (a real reviewdog post, the real tool's output on a hosted image) is covered by the CI
-self-tests: say so when the change depends on it. Never say that a check you did not see passed.
-Judge whether the change's tests prove it: a behaviour change needs a test that fails on the old
-code. When invoked directly, one focused command (one hook: `pre-commit run <hook-id> --files
-<file>`, for a hook that checks only the files it is given; one test: `bash
+self-tests: say so when the change depends on it. Judge what is missing against `AGENTS.md`'s
+*Validation matrix*: every changed path owes the checks its row names. Never say that a check you
+did not see passed. Judge whether the change's tests prove it: a behaviour change needs a test that
+fails on the old code. When invoked directly, one focused command (one hook: `pre-commit run
+<hook-id> --files <file>`, for a hook that checks only the files it is given; one test: `bash
 lib/action-passes.test.sh`) may be run to confirm a single suspected finding, never a full suite or
 gate. A candidate that is neither reproduced nor traced end to end is dropped.
 
